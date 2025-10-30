@@ -1,123 +1,160 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Temporizador Dry-Fire — REGON Tactical</title>
-  <style>
-    body {
-      margin:0;
-      font-family: system-ui, sans-serif;
-      color:#fff;
-      background-color:#000;
-      background-image: url("fondo-logo.png"); /* ← aquí pones tu logo */
-      background-size: 400px;
-      background-repeat: no-repeat;
-      background-position: center center;
-      background-attachment: fixed;
-    }
-    .container {
-      max-width: 500px;
-      margin: 0 auto;
-      padding: 20px;
-      text-align:center;
-      backdrop-filter: blur(4px);
-      background-color: rgba(0,0,0,0.5);
-      border-radius: 10px;
-      margin-top:40px;
-    }
-    h1 {margin-bottom:10px;}
-    label {display:block;margin-top:15px;}
-    select, input, button {
-      width:100%;
-      padding:10px;
-      margin-top:5px;
-      border:none;
-      border-radius:6px;
-      font-size:16px;
-    }
-    select, input {background:#222;color:#fff;}
-    button {
-      background:#e50914;
-      color:white;
-      font-weight:bold;
-      cursor:pointer;
-      transition:background 0.2s;
-    }
-    button:hover {background:#ff2a2a;}
-    #status {margin-top:20px;font-size:22px;font-weight:bold;}
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REGON Tactical - Dry Fire Timer</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #000;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Marca de agua con el logo */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 400px;
+    height: 400px;
+    background-image: url('2B7160C9-5CFE-49BC-9BDF-D1E8DE15B0F6.jpeg');
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+    opacity: 0.08;
+    transform: translate(-50%, -50%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 500px;
+    margin: auto;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #333;
+  }
+
+  select, button {
+    font-size: 1rem;
+    margin: 10px;
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+  }
+
+  button {
+    cursor: pointer;
+    background-color: #007bff;
+    color: #fff;
+    font-weight: bold;
+  }
+
+  #timerDisplay {
+    font-size: 4rem;
+    margin: 20px 0;
+  }
+</style>
 </head>
+
 <body>
   <div class="container">
-    <h1>Temporizador Dry-Fire</h1>
+    <h1>Dry Fire Timer - REGON Tactical</h1>
 
-    <label>Ejercicio</label>
-    <select id="drill">
-      <option value="draw">Desenfunde</option>
-      <option value="reload">Recarga</option>
-      <option value="transition">Transición</option>
-      <option value="movement">Movimiento</option>
+    <label for="drillSelect">Ejercicio:</label>
+    <select id="drillSelect">
+      <option value="tiro_rapido">Tiro Rápido</option>
+      <option value="recarga_emergencia">Recarga de Emergencia</option>
+      <option value="transicion">Transición entre blancos</option>
     </select>
 
-    <label>Dificultad</label>
-    <select id="difficulty">
-      <option value="easy">Fácil</option>
-      <option value="medium" selected>Media</option>
-      <option value="hard">Difícil</option>
+    <label for="difficultySelect">Dificultad:</label>
+    <select id="difficultySelect">
+      <option value="facil">Fácil</option>
+      <option value="medio">Medio</option>
+      <option value="dificil">Difícil</option>
     </select>
 
-    <label>Tiempo (segundos)</label>
-    <input type="number" id="time" value="2.0" step="0.1" min="0.1">
+    <div id="timerDisplay">0.00</div>
 
-    <div style="margin-top:20px;">
-      <button id="startBtn">Iniciar</button>
-      <button id="stopBtn">Detener</button>
-    </div>
-
-    <div id="status">Listo</div>
+    <button id="startBtn">Iniciar</button>
+    <button id="resetBtn">Reiniciar</button>
   </div>
 
-  <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
-
   <script>
-    const drills = {
-      draw: { easy: 2.5, medium: 1.8, hard: 1.2 },
-      reload: { easy: 3.0, medium: 2.2, hard: 1.5 },
-      transition: { easy: 2.0, medium: 1.5, hard: 1.0 },
-      movement: { easy: 3.5, medium: 2.5, hard: 1.8 }
+    const drillSelect = document.getElementById("drillSelect");
+    const difficultySelect = document.getElementById("difficultySelect");
+    const timerDisplay = document.getElementById("timerDisplay");
+    const startBtn = document.getElementById("startBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let timer;
+    let startTime;
+    let isRunning = false;
+    let currentDrill = "tiro_rapido";
+    let currentDifficulty = "medio";
+    let drillSettings = {
+      tiro_rapido: { facil: 2.0, medio: 1.5, dificil: 1.0 },
+      recarga_emergencia: { facil: 3.0, medio: 2.5, dificil: 2.0 },
+      transicion: { facil: 2.5, medio: 2.0, dificil: 1.5 }
     };
 
-    const drillSelect = document.getElementById("drill");
-    const diffSelect = document.getElementById("difficulty");
-    const timeInput = document.getElementById("time");
-    const statusEl = document.getElementById("status");
-    const beep = document.getElementById("beep");
-    let timer = null;
-
-    function updateTime() {
-      const drill = drillSelect.value;
-      const diff = diffSelect.value;
-      timeInput.value = drills[drill][diff];
+    function updateTimerDisplay(value) {
+      timerDisplay.textContent = value.toFixed(2);
     }
 
-    drillSelect.addEventListener("change", updateTime);
-    diffSelect.addEventListener("change", updateTime);
+    function getCurrentDrillTime() {
+      return drillSettings[currentDrill][currentDifficulty];
+    }
 
-    document.getElementById("startBtn").addEventListener("click", () => {
-      clearTimeout(timer);
-      statusEl.textContent = "Preparado...";
-      beep.play();
-      timer = setTimeout(() => {
-        statusEl.textContent = "¡Fuego!";
-        beep.play();
-      }, parseFloat(timeInput.value) * 1000);
-    });
+    function updateCurrentSettings() {
+      currentDrill = drillSelect.value;
+      currentDifficulty = difficultySelect.value;
+      updateTimerDisplay(getCurrentDrillTime());
+    }
 
-    document.getElementById("stopBtn").addEventListener("click", () => {
-      clearTimeout(timer);
-      statusEl.textContent = "Listo";
-    });
+    function startTimer() {
+      if (isRunning) return;
+      isRunning = true;
+      let total = getCurrentDrillTime();
+      updateTimerDisplay(total);
+
+      timer = setInterval(() => {
+        total -= 0.01;
+        if (total <= 0) {
+          clearInterval(timer);
+          timerDisplay.textContent = "¡Bang!";
+          isRunning = false;
+        } else {
+          updateTimerDisplay(total);
+        }
+      }, 10);
+    }
+
+    function resetTimer() {
+      clearInterval(timer);
+      isRunning = false;
+      updateTimerDisplay(getCurrentDrillTime());
+    }
+
+    drillSelect.addEventListener("change", updateCurrentSettings);
+    difficultySelect.addEventListener("change", updateCurrentSettings);
+    startBtn.addEventListener("click", startTimer);
+    resetBtn.addEventListener("click", resetTimer);
+
+    // Inicialización
+    updateCurrentSettings();
   </script>
 </body>
 </html>
