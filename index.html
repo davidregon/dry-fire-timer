@@ -116,24 +116,46 @@
   </div>
 
 <script>
-const ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-function beep(timeFromNow = 0, duration = 0.30, freq = 1000, gainVal = 0.5) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = 'sine';
-  o.frequency.value = freq;
-  g.gain.value = 0;
-  o.connect(g); g.connect(ctx.destination);
-  const now = ctx.currentTime + timeFromNow;
-  g.gain.setValueAtTime(0, now);
-  g.gain.linearRampToValueAtTime(gainVal, now + 0.005);
-  g.gain.linearRampToValueAtTime(0, now + duration);
-  o.start(now);
-  o.stop(now + duration + 0.01);
+/* Audio: crear AudioContext bajo demanda y asegurar que esté activo */
+let ctx = null;
+function ensureAudioContext() {
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // intentar reanudar si está suspendido (algunos navegadores lo hacen)
+  if (ctx.state === 'suspended') {
+    return ctx.resume().catch(()=>{/*silenciar fallo*/});
+  }
+  return Promise.resolve();
 }
 
-// Configuración por drill/dificultad
+/* beep seguro: garantiza ctx y reproduce el tono */
+function beep(timeFromNow = 0, duration = 0.30, freq = 1000, gainVal = 0.5) {
+  // ensureAudioContext puede ser async; si no está listo, creamos y reintentamos
+  ensureAudioContext().then(()=>{
+    try {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      g.gain.value = 0;
+      o.connect(g); g.connect(ctx.destination);
+      const when = ctx.currentTime + timeFromNow;
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(gainVal, when + 0.005);
+      g.gain.linearRampToValueAtTime(0, when + duration);
+      o.start(when);
+      o.stop(when + duration + 0.01);
+    } catch(e){
+      // fallback silencioso si algo falla
+      console.warn("Beep falló:", e);
+    }
+  }).catch((e)=>{
+    console.warn("No se pudo iniciar AudioContext:", e);
+  });
+}
+
+/* === Configuración por drill/dificultad === */
 const parTimes = {
   freestyle: { beginner: 1.0, intermediate: 0.8, advanced: 0.6, master: 0.45 },
   press: { beginner: 1.5, intermediate: 1.2, advanced: 1.0, master: 0.8 },
@@ -160,7 +182,7 @@ function updateParTime() {
 drillEl.addEventListener('change', updateParTime);
 diffEl.addEventListener('change', updateParTime);
 
-// Temporizador
+/* === Temporizador === */
 const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const resumeBtn = document.getElementById('resumeBtn');
@@ -187,25 +209,34 @@ function updateRepDisplay(){
 
 function clearSchedule(){ schedule.forEach(id=>clearTimeout(id)); schedule=[]; }
 
+/* Start: aseguramos audio al primer gesto */
 function startTimer(){
   if(running) return;
-  if(ctx.state === 'suspended') ctx.resume();
-  const s = getSettings();
-  totalSets = s.sets; currentSet=1; currentRep=0;
-  updateRepDisplay();
-  running=true; paused=false;
-  stateEl.textContent='Contando...';
-  startBtn.disabled=true; pauseBtn.disabled=false; resumeBtn.disabled=true; stopBtn.disabled=false;
-  const now = Date.now();
-  const startMs = now + s.delay*1000;
-  scheduleBeepSequence(startMs,s);
+  // aseguramos audio context activado por interacción del usuario
+  ensureAudioContext().then(()=>{
+    // reproducir un pequeño click/confirmación al iniciar (opcional)
+    // beep(0, 0.08, 1200, 0.4); // descomenta si quieres un pitido inmediato al pulsar
+
+    const s = getSettings();
+    totalSets = s.sets; currentSet=1; currentRep=0;
+    updateRepDisplay();
+    running=true; paused=false;
+    stateEl.textContent='Contando...';
+    startBtn.disabled=true; pauseBtn.disabled=false; resumeBtn.disabled=true; stopBtn.disabled=false;
+    const now = Date.now();
+    const startMs = now + s.delay*1000;
+    scheduleBeepSequence(startMs,s);
+  }).catch((e)=>{
+    alert("No se pudo iniciar audio: toca la pantalla y vuelve a intentar.");
+    console.warn(e);
+  });
 }
 
+/* Programación de pitidos usando setTimeout — cada timeout llama a beep() que usa ctx */
 function scheduleBeepSequence(startTimeMs,settings){
   const repGapAfterSecond = 250;
   let t=startTimeMs;
-  const totalReps=totalSets*totalRepsPerSet;
-  for(let set=1;set<=totalSets;set++){
+  for(let set=1;set<=settings.sets;set++){
     for(let rep=1;rep<=totalRepsPerSet;rep++){
       let par=settings.parTime;
       if(settings.randomize&&settings.randRange>0){
@@ -213,14 +244,18 @@ function scheduleBeepSequence(startTimeMs,settings){
         par=Math.max(0,par+delta);
       }
       const beep1Time=t, beep2Time=t+(par*1000);
+      // beep inicial de la repetición
       schedule.push(setTimeout(()=>{
-        currentSet=set; currentRep=rep; updateRepDisplay(); beep(0,0.30,1000,0.6);
-      },Math.max(0,beep1Time-Date.now())));
+        currentSet=set; currentRep=rep; updateRepDisplay();
+        // Llamamos a beep sin delay (beep se encargará de usar ctx.currentTime)
+        beep(0,0.30,1000,0.6);
+      }, Math.max(0, beep1Time - Date.now())));
+      // beep final de la repetición
       schedule.push(setTimeout(()=>{
         beep(0,0.30,1200,0.55);
-        if(set===totalSets&&rep===totalRepsPerSet) finishRun();
-      },Math.max(0,beep2Time-Date.now())));
-      t=beep2Time+repGapAfterSecond;
+        if(set===settings.sets && rep===totalRepsPerSet) finishRun();
+      }, Math.max(0, beep2Time - Date.now())));
+      t = beep2Time + repGapAfterSecond;
     }
   }
 }
@@ -238,8 +273,41 @@ function stopTimer(){
   startBtn.disabled=false; pauseBtn.disabled=true; resumeBtn.disabled=true; stopBtn.disabled=true;
 }
 
-startBtn.addEventListener('click',startTimer);
-stopBtn.addEventListener('click',stopTimer);
+/* Eventos */
+startBtn.addEventListener('click', startTimer);
+pauseBtn.addEventListener('click', ()=>{
+  if(!running || paused) return;
+  paused=true; stateEl.textContent='Pausado'; pauseBtn.disabled=true; resumeBtn.disabled=false;
+  clearSchedule();
+});
+resumeBtn.addEventListener('click', ()=>{
+  if(!paused) return;
+  paused=false; stateEl.textContent='Contando...'; pauseBtn.disabled=false; resumeBtn.disabled=true;
+  // reconstruir horario desde currentSet/currentRep
+  const s = getSettings();
+  const startNow = Date.now() + 200;
+  let set = currentSet;
+  let rep = currentRep + 1;
+  if(rep > totalRepsPerSet){ set++; rep = 1; }
+  if(set > s.sets){ finishRun(); return; }
+  let t = startNow;
+  for(let ss=set; ss<=s.sets; ss++){
+    for(let r=(ss===set?rep:1); r<=totalRepsPerSet; r++){
+      let par = s.parTime;
+      if(s.randomize && s.randRange>0){
+        const delta=(Math.random()*2-1)*s.randRange;
+        par = Math.max(0, par + delta);
+      }
+      const b1 = t, b2 = t + par*1000;
+      schedule.push(setTimeout(()=>{ currentSet=ss; currentRep=r; updateRepDisplay(); beep(0,0.30,1000,0.6); }, Math.max(0, b1 - Date.now())));
+      schedule.push(setTimeout(()=>{ beep(0,0.30,1200,0.55); if(ss===s.sets && r===totalRepsPerSet) finishRun(); }, Math.max(0, b2 - Date.now())));
+      t = b2 + 250;
+    }
+  }
+});
+stopBtn.addEventListener('click', stopTimer);
+
+/* Inicial */
 updateRepDisplay();
 updateParTime();
 </script>
