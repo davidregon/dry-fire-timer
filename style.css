@@ -1,0 +1,102 @@
+body {
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    background-color: #f4f4f9;
+}
+
+.container {
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+}
+
+h1 {
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.input-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+label {
+    font-weight: bold;
+    color: #555;
+}
+
+input[type="number"] {
+    width: 100px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    text-align: center;
+}
+
+button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+#startButton {
+    background-color: #4CAF50;
+    color: white;
+}
+
+#startButton:hover:not([disabled]) {
+    background-color: #45a049;
+}
+
+#stopButton {
+    background-color: #f44336;
+    color: white;
+}
+
+#stopButton:hover:not([disabled]) {
+    background-color: #da190b;
+}
+
+button[disabled] {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.display-area {
+    border: 2px solid #333;
+    border-radius: 5px;
+    padding: 20px;
+    min-height: 80px;
+}
+
+#status {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #007bff;
+    margin-top: 0;
+}
+
+#counter {
+    font-size: 2em;
+    color: #333;
+    margin: 5px 0 0 0;
+}
