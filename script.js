@@ -8,71 +8,110 @@ const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const statusDisplay = document.getElementById('status');
 const counterDisplay = document.getElementById('counter');
+const currentSetDisplay = document.getElementById('currentSet');
 
 // Variables de estado del Timer
-let audioContext;
-let mainTimerId = null;
+let audioContext = null; // Se inicializará con el primer clic del usuario
+let mainTimerId = null; // ID para setTimeout (delay/par time)
+let animationFrameId = null; // ID para requestAnimationFrame (cronómetro)
+let startTime = 0; // Tiempo de inicio del cronómetro
 let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
-let restTimerId = null;
+let isCountingTime = false;
 
-// --- Funciones de Audio ---
+// --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
-// Inicializa o reanuda el AudioContext (necesario por las restricciones del navegador)
-function getAudioContext() {
+// Intenta inicializar o reanudar AudioContext al primer clic.
+function startAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    // Reanudar si está suspendido (necesario en algunos navegadores después del primer clic)
     if (audioContext.state === 'suspended') {
-        audioContext.resume();
+        audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
     return audioContext;
 }
 
-// Función para generar un pitido
+// Función para generar un pitido (se asegura de usar el contexto)
 function playBeep(frequency, duration) {
-    const context = getAudioContext();
+    const context = startAudioContext();
     const oscillator = context.createOscillator();
     const gainNode = context.createGain();
 
-    oscillator.type = 'square'; // Onda cuadrada para un sonido más "digital" y fuerte
+    oscillator.type = 'square';
     oscillator.frequency.setValueAtTime(frequency, context.currentTime);
     
-    gainNode.gain.setValueAtTime(0.5, context.currentTime); // Volumen
-    
+    // Conexión y volumen
+    gainNode.gain.setValueAtTime(0.5, context.currentTime); 
     oscillator.connect(gainNode);
     gainNode.connect(context.destination);
 
-    oscillator.start();
+    oscillator.start(context.currentTime);
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// --- Lógica del Temporizador ---
-
 // 1. Pitido de INICIO (Frecuencia alta)
 function startBeep() {
-    playBeep(1200, 100); // Pitido de inicio, agudo y corto
-    statusDisplay.textContent = `🚨 ¡FUEGO! (Set ${currentRepetition}/${totalRepetitions})`;
-    counterDisplay.textContent = '¡DISPARA!';
+    playBeep(1500, 100); // Agudo, corto y penetrante
+    statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
+    
+    // Iniciar el cronómetro
+    startTimerDisplay();
 }
 
-// 2. Pitido de PAR TIME (Frecuencia baja y doble)
+// 2. Pitido de PAR TIME (Doble pitido grave)
 function parTimeBeep() {
-    // Doble pitido más grave para indicar el fin del tiempo límite (Par Time)
+    stopTimerDisplay(); // Detener el cronómetro
+
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
-    statusDisplay.textContent = `✅ Par Time Finalizado.`;
-    counterDisplay.textContent = 'RECARGANDO...';
+    statusDisplay.textContent = `TIEMPO PAR: ${parTimeInput.value}s`;
 }
 
-// Genera un retardo aleatorio entre min y max (en milisegundos)
+// --- FUNCIONES DE CRONÓMETRO DE ALTA PRECISIÓN ---
+
+// Inicia el cronómetro visual
+function startTimerDisplay() {
+    startTime = Date.now();
+    isCountingTime = true;
+    updateTimerDisplay();
+}
+
+// Detiene el cronómetro visual
+function stopTimerDisplay() {
+    isCountingTime = false;
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+}
+
+// Función que actualiza el display del cronómetro (usando requestAnimationFrame para precisión)
+function updateTimerDisplay() {
+    if (!isCountingTime) return;
+
+    const elapsedTime = Date.now() - startTime;
+    
+    // Formatear a S.cs (Segundos.Centésimas)
+    const seconds = Math.floor(elapsedTime / 1000);
+    const centiseconds = Math.floor((elapsedTime % 1000) / 10); // Centésimas de segundo
+
+    const formattedTime = `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+    counterDisplay.textContent = formattedTime;
+
+    // Llamar a sí misma en el siguiente ciclo de animación del navegador
+    animationFrameId = requestAnimationFrame(updateTimerDisplay);
+}
+
+// --- LÓGICA PRINCIPAL DEL ENTRENAMIENTO ---
+
+// Genera un retardo aleatorio (en milisegundos)
 function getRandomDelay(min, max) {
-    // Fórmula: Math.random() * (max - min) + min
-    const delay = Math.random() * (max - min) + min;
-    return delay * 1000; // Convertir a milisegundos
+    const minMs = parseFloat(min) * 1000;
+    const maxMs = parseFloat(max) * 1000;
+    const delay = Math.random() * (maxMs - minMs) + minMs;
+    return delay;
 }
 
 // Ejecuta un ciclo de repetición (Set)
@@ -84,29 +123,30 @@ function runRepetition() {
         return;
     }
 
-    const min = parseFloat(minDelayInput.value);
-    const max = parseFloat(maxDelayInput.value);
-    const parTime = parseFloat(parTimeInput.value) * 1000;
+    const min = minDelayInput.value;
+    const max = maxDelayInput.value;
+    const parTimeMs = parseFloat(parTimeInput.value) * 1000;
 
-    // Validación de retardo aleatorio
-    if (min >= max) {
-        statusDisplay.textContent = "❌ Error: Retardo Mínimo debe ser menor que el Máximo.";
+    // Validación
+    if (parseFloat(min) >= parseFloat(max)) {
+        statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor que el Máx.";
         stopTimer(false);
         return;
     }
+    currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
     const randomDelay = getRandomDelay(min, max);
     
-    statusDisplay.textContent = `Esperando señal... (Set ${currentRepetition}/${totalRepetitions})`;
-    counterDisplay.textContent = `Retardo: ${randomDelay.toFixed(0)}ms`;
+    counterDisplay.textContent = '00.00';
+    statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL (Set ${currentRepetition})`;
 
-    // Paso 1: Espera el Retardo Aleatorio, luego suena el pitido de INICIO
+    // Paso 1: Espera el Retardo Aleatorio -> startBeep
     mainTimerId = setTimeout(() => {
         if (!isRunning) return;
         
         startBeep();
         
-        // Paso 2: Después del pitido de INICIO, espera el Tiempo Par, luego suena el pitido de FIN
+        // Paso 2: Espera el Tiempo Par -> parTimeBeep
         mainTimerId = setTimeout(() => {
             if (!isRunning) return;
 
@@ -117,19 +157,22 @@ function runRepetition() {
             if (currentRepetition <= totalRepetitions) {
                 // Programa el descanso antes de la siguiente repetición
                 const rest = parseFloat(restTimeInput.value) * 1000;
-                statusDisplay.textContent = `⏳ Descanso (${rest / 1000}s)...`;
+                statusDisplay.textContent = `DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
                 
-                restTimerId = setTimeout(runRepetition, rest); 
+                mainTimerId = setTimeout(runRepetition, rest); 
             } else {
                 runRepetition(); // Llama para finalizar la sesión
             }
-        }, parTime);
+        }, parTimeMs);
         
     }, randomDelay);
 }
 
 // Inicia el temporizador
 function startTimer() {
+    // Asegurarse de que el contexto de audio esté activo al primer clic
+    startAudioContext();
+    
     if (isRunning) return;
 
     // Obtener y validar valores
@@ -144,7 +187,7 @@ function startTimer() {
     currentRepetition = 1;
     isRunning = true;
     
-    // Control de interfaz: deshabilitar controles y habilitar stop
+    // Control de interfaz
     toggleControls(true);
 
     // Inicio del ciclo
@@ -154,20 +197,21 @@ function startTimer() {
 // Detiene el temporizador
 function stopTimer(completed = false) {
     clearTimeout(mainTimerId);
-    clearTimeout(restTimerId);
+    stopTimerDisplay();
     isRunning = false;
     
-    // Control de interfaz: habilitar controles y deshabilitar stop
+    // Control de interfaz
     toggleControls(false);
 
     // Actualiza el estado
     if (completed) {
-        statusDisplay.textContent = '🎉 ¡Entrenamiento Completo! ¡Buen trabajo!';
-        counterDisplay.textContent = `Sesiones terminadas: ${totalRepetitions}`;
+        statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
+        counterDisplay.textContent = 'FIN';
     } else {
-        statusDisplay.textContent = `🛑 Detenido por el usuario.`;
-        counterDisplay.textContent = `Sets hechos: ${currentRepetition > 1 ? currentRepetition - 1 : 0}`;
+        statusDisplay.textContent = `DETENIDO. ${currentRepetition > 1 ? currentRepetition - 1 : 0} SETS REALIZADOS`;
+        counterDisplay.textContent = 'PAUSA';
     }
+    currentSetDisplay.textContent = 'Set: 0/0';
 }
 
 // Función auxiliar para gestionar la interfaz
