@@ -141,5 +141,63 @@ button[disabled] {
 .current-set {
     font-size: 0.9em;
     color: #aaa;
-    margin: 0;
+    margin: 0 0 20px 0;
+    text-align: right;
+}
+
+/* --- Estilos para la tabla de registro (Log) --- */
+
+.log-panel {
+    background-color: #383838;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.log-panel h2 {
+    color: #f0f0f0;
+    border-bottom: 1px solid #555;
+    margin-bottom: 15px;
+    color: #00e676; /* Mantener el acento */
+}
+
+#logTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+}
+
+#logTable th, #logTable td {
+    border: 1px solid #555;
+    padding: 8px;
+    text-align: center;
+}
+
+#logTable thead th {
+    background-color: #1a1a1a;
+    color: #00e676;
+    font-weight: bold;
+}
+
+#logTable tbody td {
+    background-color: #2c2c2c;
+    color: #f0f0f0;
+}
+
+/* Input para registrar el tiempo */
+#logTable input[type="text"] {
+    width: 60px;
+    padding: 5px;
+    text-align: center;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    border: 1px solid #00e676;
+}
+
+.note {
+    font-size: 0.8em;
+    color: #aaa;
+    text-align: left;
 }
