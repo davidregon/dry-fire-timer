@@ -29,18 +29,15 @@ let isCountingTime = false;
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
-// Inicializa o reanuda el AudioContext (DEBE ser llamado por un evento de clic)
 function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    // Forzar reanudación en caso de que esté suspendido
     if (audioContext.state === 'suspended') {
         audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
 }
 
-// Función para generar un pitido
 function playBeep(frequency, duration) {
     if (!audioContext) {
         console.warn("AudioContext no inicializado. Asegúrese de hacer clic en 'Iniciar'.");
@@ -54,7 +51,6 @@ function playBeep(frequency, duration) {
     oscillator.type = 'square';
     oscillator.frequency.setValueAtTime(frequency, context.currentTime);
     
-    // Conexión y volumen
     gainNode.gain.setValueAtTime(0.5, context.currentTime); 
     oscillator.connect(gainNode);
     gainNode.connect(context.destination);
@@ -76,7 +72,7 @@ function parTimeBeep() {
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
-    statusDisplay.textContent = `TIEMPO PAR FINALIZADO.`;
+    statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
 // --- FUNCIONES DE CRONÓMETRO DE ALTA PRECISIÓN ---
@@ -110,60 +106,39 @@ function updateTimerDisplay() {
     animationFrameId = requestAnimationFrame(updateTimerDisplay);
 }
 
-// --- LÓGICA DE REGISTRO ---
+// --- LÓGICA DE REGISTRO AUTOMÁTICO ---
 
 function clearLog() {
     logTableBody.innerHTML = '';
 }
 
-function createLogEntry(setNumber, parTime) {
+// Crea una fila en el historial con la configuración del set
+function createLogEntry(setNumber, minDelay, maxDelay, parTime) {
     const row = logTableBody.insertRow();
     row.id = `set-${setNumber}`;
     
+    // 1. Set Number
     let cell1 = row.insertCell();
     cell1.textContent = setNumber;
-    
+
+    // 2. Start Delay Range
     let cell2 = row.insertCell();
-    cell2.textContent = parTime;
+    cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`;
 
+    // 3. Par Time
     let cell3 = row.insertCell();
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = '0.00';
-    input.disabled = true; 
+    cell3.textContent = parTime.toFixed(2) + ' s'; 
     
-    cell3.appendChild(input);
+    // 4. Tiempo Límite (El tiempo límite es el Par Time)
+    let cell4 = row.insertCell();
+    cell4.textContent = parTime.toFixed(2) + ' s';
     
-    // Listener para programar el siguiente set al pulsar ENTER
-    input.addEventListener('keyup', (event) => {
-        if (event.key === 'Enter') {
-             const timeValue = parseFloat(input.value);
-             if (isNaN(timeValue) || timeValue <= 0) {
-                 input.value = '';
-                 input.placeholder = 'Inválido';
-                 return;
-             }
-             
-             input.disabled = true; 
-             
-             // Si aún quedan repeticiones, programar el descanso y el siguiente set
-             if (isRunning && currentRepetition <= totalRepetitions) {
-                 const rest = parseFloat(restTimeInput.value) * 1000;
-                 statusDisplay.textContent = `DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                 mainTimerId = setTimeout(runRepetition, rest); 
-             } else if (currentRepetition > totalRepetitions) {
-                 // Si fue el último set
-                 stopTimer(true); 
-             }
-        }
-    });
-
     logTableBody.appendChild(row);
     return row;
 }
 
 
-// --- LÓGICA PRINCIPAL DE LOS MODOS ---
+// --- LÓGICA PRINCIPAL DE LOS MODOS (FLUJO CONTINUO) ---
 
 function getRandomDelay(min, max) {
     const minMs = parseFloat(min) * 1000;
@@ -177,14 +152,10 @@ function runRepetition() {
 
     const currentMode = modeSelector.value;
     
-    if (currentMode !== 'free') {
-        if (currentRepetition > totalRepetitions) {
-            stopTimer(true);
-            return;
-        }
-    } else {
-        // En modo libre, la cuenta solo es para referencia
-        currentRepetition++;
+    // Si no es Modo Libre y ya se terminaron las repeticiones, detener.
+    if (currentMode !== 'free' && currentRepetition > totalRepetitions) {
+        stopTimer(true);
+        return;
     }
 
     // 1. OBTENER PARÁMETROS DE RETARDO
@@ -194,18 +165,16 @@ function runRepetition() {
     
     // Lógica para Modo Aleatorio PRO: Retardos variables en cada set
     if (currentMode === 'pro') {
-        // Rango amplio para la variación
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
-        // Nuevos min y max generados de forma aleatoria y luego ajustados
         const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
         const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
         
         minDelay = parseFloat(newMin.toFixed(1));
         maxDelay = parseFloat(newMax.toFixed(1));
         
-        // Actualizar la interfaz para que el usuario sepa los nuevos parámetros de este set
+        // Actualizar la interfaz para el usuario
         minDelayInput.value = minDelay;
         maxDelayInput.value = maxDelay;
     }
@@ -218,9 +187,12 @@ function runRepetition() {
         return;
     }
 
-    let currentRow = null;
+    // Aumentar la repetición aquí, antes de correr el set
+    currentRepetition++;
+
+    // Registro automático antes de iniciar el set (solo Manual/Pro)
     if (currentMode === 'manual' || currentMode === 'pro') {
-        currentRow = createLogEntry(currentRepetition, parTime.toFixed(2));
+        createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
         currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
     } else {
          currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
@@ -237,26 +209,21 @@ function runRepetition() {
         
         startBeep();
         
-        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Par -> parTimeBeep
+        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Par -> parTimeBeep y programar siguiente set
         if (currentMode === 'manual' || currentMode === 'pro') {
             mainTimerId = setTimeout(() => {
                 if (!isRunning) return;
 
                 parTimeBeep();
                 
-                // Habilitar input de registro
-                const inputField = currentRow.querySelector('input');
-                if (inputField) {
-                    inputField.disabled = false;
-                    inputField.focus();
-                }
-                
-                currentRepetition++;
-                
-                if (currentRepetition <= totalRepetitions) {
-                    statusDisplay.textContent += ' REGISTRA TU TIEMPO y pulsa ENTER.';
+                // *** Flujo continuo: programar el descanso inmediatamente ***
+                if (currentRepetition < totalRepetitions) {
+                    const rest = parseFloat(restTimeInput.value) * 1000;
+                    statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
+                    mainTimerId = setTimeout(runRepetition, rest);
                 } else {
-                     statusDisplay.textContent = 'ÚLTIMO SET. REGISTRA TU TIEMPO y pulsa ENTER.';
+                    // Todas las repeticiones completadas
+                    stopTimer(true);
                 }
 
             }, parTimeMs);
@@ -265,7 +232,6 @@ function runRepetition() {
             const rest = parseFloat(restTimeInput.value) * 1000;
             statusDisplay.textContent = `DESCANSO. PRÓXIMO INICIO EN ${rest / 1000}s...`;
             
-            // Programar el siguiente set de Modo Libre
             mainTimerId = setTimeout(runRepetition, rest);
         }
         
@@ -273,13 +239,12 @@ function runRepetition() {
 }
 
 
-// FUNCIÓN DE INICIO CON LÓGICA DE MODO
+// FUNCIÓN DE INICIO
 function startTimer() {
     if (isRunning) return;
     
     const currentMode = modeSelector.value;
     
-    // Validación general para modos no libres
     if (currentMode !== 'free') {
         totalRepetitions = parseInt(repetitionsInput.value);
         if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
@@ -287,10 +252,10 @@ function startTimer() {
             return;
         }
     } else {
-        totalRepetitions = '∞'; // Infinito para el modo libre
+        totalRepetitions = '∞'; 
     }
 
-    currentRepetition = 1;
+    currentRepetition = 0; // Comenzamos en 0 para que la primera llamada a runRepetition lo suba a 1
     isRunning = true;
     
     toggleControls(true);
@@ -305,15 +270,14 @@ function stopTimer(completed = false) {
     isRunning = false;
     
     toggleControls(false);
-
-    // Si se detiene manualmente antes del input, deshabilitar campos abiertos
-    document.querySelectorAll('#logTable input:not([disabled])').forEach(input => input.disabled = true);
     
     if (completed) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
     } else {
-        statusDisplay.textContent = `DETENIDO. ${currentRepetition > 1 ? currentRepetition - 1 : 0} SETS REALIZADOS`;
+        // currentRepetition se incrementa antes de correr, así que restamos 1 para el set actual
+        const setsDone = currentRepetition > 0 ? currentRepetition - 1 : 0;
+        statusDisplay.textContent = `DETENIDO. ${setsDone} SETS REALIZADOS`;
         counterDisplay.textContent = 'PAUSA';
     }
     currentSetDisplay.textContent = 'Set: 0/0';
@@ -324,35 +288,29 @@ function stopTimer(completed = false) {
 function updateInterfaceByMode() {
     const mode = modeSelector.value;
     
-    // Ocultar/Mostrar Par Time
     const showParTime = mode !== 'free';
     parTimeGroup.classList.toggle('hidden', !showParTime);
 
-    // Ocultar/Mostrar Repeticiones y Descanso
     const showRepRest = mode !== 'free';
     repetitionsGroup.classList.toggle('hidden', !showRepRest);
     restTimeGroup.classList.toggle('hidden', !showRepRest);
     repRestSeparator.classList.toggle('hidden', !showRepRest);
 
-    // Ocultar/Mostrar Log
     const showLog = mode === 'manual' || mode === 'pro';
     logPanel.classList.toggle('hidden', !showLog);
     
-    // Habilitar/Deshabilitar Retardos en modo 'pro' (para dejar claro que cambian solos)
+    // Deshabilitar Retardos en modo 'pro' para indicar que cambian solos
     const disableDelayInputs = mode === 'pro';
     minDelayInput.disabled = disableDelayInputs;
     maxDelayInput.disabled = disableDelayInputs;
     
-    // Si se pasa de Pro a Manual/Libre, restaurar el estado de los inputs
     if (mode !== 'pro') {
         minDelayInput.disabled = false;
         maxDelayInput.disabled = false;
     }
     
-    // Mensaje en el botón (opcional)
     startButton.textContent = (mode === 'free') ? 'INICIAR (LIBRE)' : 'INICIAR';
     
-    // Resetear display
     statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
     counterDisplay.textContent = '00.00';
     currentSetDisplay.textContent = 'Set: 0/0';
@@ -369,23 +327,17 @@ function toggleControls(disable) {
     restTimeInput.disabled = disable;
     modeSelector.disabled = disable;
     
-    // Mantener la deshabilitación del Retardo en modo Pro incluso al iniciar
     if (modeSelector.value !== 'pro') {
         minDelayInput.disabled = disable;
         maxDelayInput.disabled = disable;
     }
 }
 
-// Inicializar el AudioContext en el evento de clic del botón (Garantía de Sonido)
 startButton.addEventListener('click', () => {
     initAudioContext(); 
     startTimer();
 });
 
 stopButton.addEventListener('click', () => stopTimer(false));
-
-// Listener para cambiar la interfaz al seleccionar el modo
 modeSelector.addEventListener('change', updateInterfaceByMode);
-
-// Inicializar la interfaz al cargar la página
 document.addEventListener('DOMContentLoaded', updateInterfaceByMode);
