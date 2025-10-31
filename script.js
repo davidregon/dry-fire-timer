@@ -26,6 +26,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
 let isCountingTime = false;
+let speechAvailable = 'speechSynthesis' in window; // Comprobación de disponibilidad de voz
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
@@ -59,9 +60,8 @@ function playBeep(frequency, duration) {
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// 1. Pitido de INICIO (MÁS LARGO Y MÁS AGUDO)
+// 1. Pitido de INICIO (2000 Hz, 200 ms)
 function startBeep() {
-    // Frecuencia: 2000 Hz (más agudo), Duración: 200 ms (más largo)
     playBeep(2000, 200); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
@@ -76,17 +76,20 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz READY? (NUEVO)
+// 3. Voz READY? (AJUSTADO PARA MEJOR FIABILIDAD)
 function readyVoice() {
-    // Usamos la API de síntesis de voz (Text-to-Speech)
-    if ('speechSynthesis' in window) {
+    if (speechAvailable) {
+        window.speechSynthesis.cancel(); 
+        
         const utterance = new SpeechSynthesisUtterance("Ready?");
-        // Opcional: Configurar idioma o velocidad
         utterance.lang = 'en-US'; 
         utterance.rate = 1.0; 
+        
         window.speechSynthesis.speak(utterance);
     } else {
-        console.warn("La API de síntesis de voz no está soportada en este navegador.");
+        // En caso de que la API no esté disponible, se mostrará un mensaje de estado alternativo
+        statusDisplay.textContent = `READY... ESPERANDO SEÑAL`;
+        console.warn("La API de síntesis de voz no está soportada o no está disponible.");
     }
 }
 
@@ -172,11 +175,14 @@ function runRepetition() {
     let maxDelay = parseFloat(maxDelayInput.value);
     let parTime = parseFloat(parTimeInput.value);
     
+    // ** CORRECCIÓN LÓGICA EN MODO PRO para el rango de retardo aleatorio
     if (currentMode === 'pro') {
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
+        // Generación de un nuevo mínimo aleatorio entre 1.0 y 6.0
         const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
+        // Generación del nuevo máximo, asegurando que sea al menos 0.5s mayor que newMin
         const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
         
         minDelay = parseFloat(newMin.toFixed(1));
@@ -203,13 +209,18 @@ function runRepetition() {
          currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
     }
 
-    // *** NUEVA LÓGICA: READY? ***
+    // *** POSICIÓN DE LA VOZ: DESPUÉS DEL DESCANSO Y ANTES DEL RETARDO ALEATORIO ***
     readyVoice();
     
     const randomDelay = getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
-    statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
+    // Si la voz no es compatible, este mensaje permanece. Si lo es, la voz actúa como el READY.
+    if (!speechAvailable) {
+        statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
+    } else {
+        statusDisplay.textContent = `ESPERANDO SEÑAL...`;
+    }
 
     // Paso 1: Espera el Retardo Aleatorio -> startBeep
     mainTimerId = setTimeout(() => {
@@ -228,7 +239,7 @@ function runRepetition() {
                 if (currentRepetition < totalRepetitions) {
                     const rest = parseFloat(restTimeInput.value) * 1000;
                     statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                    mainTimerId = setTimeout(runRepetition, rest);
+                    mainTimerId = setTimeout(runRepetition, rest); // <-- Llama a runRepetition después del descanso
                 } else {
                     stopTimer(true);
                 }
@@ -277,7 +288,7 @@ function stopTimer(completed = false) {
     isRunning = false;
     
     // Detener la síntesis de voz si está activa
-    if ('speechSynthesis' in window) {
+    if (speechAvailable) {
         window.speechSynthesis.cancel();
     }
     
