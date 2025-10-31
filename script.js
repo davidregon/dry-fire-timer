@@ -1,89 +1,131 @@
-const reactionTimeInput = document.getElementById('reactionTime');
+// Referencias a los elementos del DOM
+const minDelayInput = document.getElementById('minDelay');
+const maxDelayInput = document.getElementById('maxDelay');
+const parTimeInput = document.getElementById('parTime');
 const repetitionsInput = document.getElementById('repetitions');
+const restTimeInput = document.getElementById('restTime');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const statusDisplay = document.getElementById('status');
 const counterDisplay = document.getElementById('counter');
 
+// Variables de estado del Timer
 let audioContext;
-let timerId = null;
+let mainTimerId = null;
 let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
+let restTimerId = null;
 
-// Función para crear y reproducir un pitido
-function playBeep(frequency, duration) {
+// --- Funciones de Audio ---
+
+// Inicializa o reanuda el AudioContext (necesario por las restricciones del navegador)
+function getAudioContext() {
     if (!audioContext) {
-        // Inicializa AudioContext la primera vez que se necesita
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    
-    // Generador de onda (oscillator)
-    const oscillator = audioContext.createOscillator();
-    // Control de volumen (gain)
-    const gainNode = audioContext.createGain();
-
-    oscillator.type = 'sine'; // Tipo de onda (senoidal)
-    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    
-    // Conecta el oscilador al control de volumen y este al destino (altavoces)
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    // Ajusta el volumen a 0.5
-    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-
-    // Inicia el sonido inmediatamente
-    oscillator.start();
-
-    // Detiene el sonido después de la duración especificada
-    oscillator.stop(audioContext.currentTime + duration / 1000);
+    // Reanudar si está suspendido (necesario en algunos navegadores después del primer clic)
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    return audioContext;
 }
 
-// Función principal para una repetición
+// Función para generar un pitido
+function playBeep(frequency, duration) {
+    const context = getAudioContext();
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.type = 'square'; // Onda cuadrada para un sonido más "digital" y fuerte
+    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+    
+    gainNode.gain.setValueAtTime(0.5, context.currentTime); // Volumen
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.start();
+    oscillator.stop(context.currentTime + duration / 1000);
+}
+
+// --- Lógica del Temporizador ---
+
+// 1. Pitido de INICIO (Frecuencia alta)
+function startBeep() {
+    playBeep(1200, 100); // Pitido de inicio, agudo y corto
+    statusDisplay.textContent = `🚨 ¡FUEGO! (Set ${currentRepetition}/${totalRepetitions})`;
+    counterDisplay.textContent = '¡DISPARA!';
+}
+
+// 2. Pitido de PAR TIME (Frecuencia baja y doble)
+function parTimeBeep() {
+    // Doble pitido más grave para indicar el fin del tiempo límite (Par Time)
+    playBeep(400, 150);
+    setTimeout(() => playBeep(400, 150), 200);
+
+    statusDisplay.textContent = `✅ Par Time Finalizado.`;
+    counterDisplay.textContent = 'RECARGANDO...';
+}
+
+// Genera un retardo aleatorio entre min y max (en milisegundos)
+function getRandomDelay(min, max) {
+    // Fórmula: Math.random() * (max - min) + min
+    const delay = Math.random() * (max - min) + min;
+    return delay * 1000; // Convertir a milisegundos
+}
+
+// Ejecuta un ciclo de repetición (Set)
 function runRepetition() {
     if (!isRunning) return;
 
     if (currentRepetition > totalRepetitions) {
-        // Todas las repeticiones completadas
-        stopTimer(true); // El 'true' indica una parada por finalización
+        stopTimer(true); // Finalización exitosa
         return;
     }
 
-    const reactionTime = parseFloat(reactionTimeInput.value) * 1000; // a milisegundos
-    
-    statusDisplay.textContent = `Preparando Repetición ${currentRepetition}/${totalRepetitions}...`;
-    counterDisplay.textContent = `Espera ${reactionTime / 1000}s...`;
+    const min = parseFloat(minDelayInput.value);
+    const max = parseFloat(maxDelayInput.value);
+    const parTime = parseFloat(parTimeInput.value) * 1000;
 
-    // Paso 1: Pitido de INICIO (después del tiempo de reacción aleatorio)
-    timerId = setTimeout(() => {
+    // Validación de retardo aleatorio
+    if (min >= max) {
+        statusDisplay.textContent = "❌ Error: Retardo Mínimo debe ser menor que el Máximo.";
+        stopTimer(false);
+        return;
+    }
+
+    const randomDelay = getRandomDelay(min, max);
+    
+    statusDisplay.textContent = `Esperando señal... (Set ${currentRepetition}/${totalRepetitions})`;
+    counterDisplay.textContent = `Retardo: ${randomDelay.toFixed(0)}ms`;
+
+    // Paso 1: Espera el Retardo Aleatorio, luego suena el pitido de INICIO
+    mainTimerId = setTimeout(() => {
         if (!isRunning) return;
         
-        playBeep(880, 200); // Pitido de inicio (más agudo)
-        statusDisplay.textContent = `¡FUEGO! Repetición ${currentRepetition}/${totalRepetitions}`;
-        counterDisplay.textContent = '¡DISPARA!';
+        startBeep();
         
-        // Paso 2: Pitido de FIN (después de 2 segundos, por ejemplo, para simular tiempo de ejercicio)
-        // Podrías añadir otra configuración si quieres que este tiempo sea variable
-        timerId = setTimeout(() => {
+        // Paso 2: Después del pitido de INICIO, espera el Tiempo Par, luego suena el pitido de FIN
+        mainTimerId = setTimeout(() => {
             if (!isRunning) return;
+
+            parTimeBeep();
             
-            playBeep(440, 400); // Pitido de fin (más grave y largo)
-            
-            // Incrementa la repetición y programa la siguiente
             currentRepetition++;
             
             if (currentRepetition <= totalRepetitions) {
-                // Programa la siguiente repetición después de un breve descanso (ej. 1 segundo)
-                statusDisplay.textContent = `Descanso...`;
-                counterDisplay.textContent = 'Preparando siguiente...';
-                timerId = setTimeout(runRepetition, 1000); 
+                // Programa el descanso antes de la siguiente repetición
+                const rest = parseFloat(restTimeInput.value) * 1000;
+                statusDisplay.textContent = `⏳ Descanso (${rest / 1000}s)...`;
+                
+                restTimerId = setTimeout(runRepetition, rest); 
             } else {
-                runRepetition(); // Llama para finalizar si es la última
+                runRepetition(); // Llama para finalizar la sesión
             }
-        }, 2000); // Tiempo fijo de "ejercicio" después del pitido de inicio
+        }, parTime);
         
-    }, reactionTime);
+    }, randomDelay);
 }
 
 // Inicia el temporizador
@@ -91,24 +133,19 @@ function startTimer() {
     if (isRunning) return;
 
     // Obtener y validar valores
-    const rTime = parseFloat(reactionTimeInput.value);
-    const reps = parseInt(repetitionsInput.value);
-
-    if (rTime < 0.5 || reps < 1) {
-        alert("Asegúrate de que el Tiempo de Reacción es >= 0.5s y las Repeticiones son >= 1.");
+    totalRepetitions = parseInt(repetitionsInput.value);
+    
+    if (totalRepetitions < 1) {
+        alert("El número de Repeticiones debe ser 1 o más.");
         return;
     }
 
     // Configuración inicial
-    totalRepetitions = reps;
     currentRepetition = 1;
     isRunning = true;
     
-    // Control de botones
-    startButton.disabled = true;
-    stopButton.disabled = false;
-    reactionTimeInput.disabled = true;
-    repetitionsInput.disabled = true;
+    // Control de interfaz: deshabilitar controles y habilitar stop
+    toggleControls(true);
 
     // Inicio del ciclo
     runRepetition();
@@ -116,23 +153,32 @@ function startTimer() {
 
 // Detiene el temporizador
 function stopTimer(completed = false) {
-    clearTimeout(timerId);
+    clearTimeout(mainTimerId);
+    clearTimeout(restTimerId);
     isRunning = false;
     
-    // Control de botones
-    startButton.disabled = false;
-    stopButton.disabled = true;
-    reactionTimeInput.disabled = false;
-    repetitionsInput.disabled = false;
+    // Control de interfaz: habilitar controles y deshabilitar stop
+    toggleControls(false);
 
     // Actualiza el estado
     if (completed) {
-        statusDisplay.textContent = '✅ ¡Entrenamiento Completado!';
-        counterDisplay.textContent = `Total: ${totalRepetitions} repeticiones.`;
+        statusDisplay.textContent = '🎉 ¡Entrenamiento Completo! ¡Buen trabajo!';
+        counterDisplay.textContent = `Sesiones terminadas: ${totalRepetitions}`;
     } else {
-        statusDisplay.textContent = `🔴 Detenido. Repetición ${currentRepetition} de ${totalRepetitions}.`;
-        counterDisplay.textContent = 'Vuelve a iniciar.';
+        statusDisplay.textContent = `🛑 Detenido por el usuario.`;
+        counterDisplay.textContent = `Sets hechos: ${currentRepetition > 1 ? currentRepetition - 1 : 0}`;
     }
+}
+
+// Función auxiliar para gestionar la interfaz
+function toggleControls(disable) {
+    startButton.disabled = disable;
+    stopButton.disabled = !disable;
+    minDelayInput.disabled = disable;
+    maxDelayInput.disabled = disable;
+    parTimeInput.disabled = disable;
+    repetitionsInput.disabled = disable;
+    restTimeInput.disabled = disable;
 }
 
 // Event Listeners
