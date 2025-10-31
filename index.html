@@ -3,28 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Timer de Tiro en Seco</title>
+    <title>Dry Fire Pro Timer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>🔫 Timer de Tiro en Seco</h1>
+        <h1>🎯 Dry Fire Pro Timer</h1>
         <div class="controls">
             <div class="input-group">
-                <label for="reactionTime">Tiempo de Reacción (segundos):</label>
-                <input type="number" id="reactionTime" value="2" min="0.5" step="0.1">
+                <label for="minDelay">Retardo Mínimo (s):</label>
+                <input type="number" id="minDelay" value="1.0" min="0.5" step="0.1">
             </div>
             <div class="input-group">
-                <label for="repetitions">Repeticiones:</label>
-                <input type="number" id="repetitions" value="5" min="1">
+                <label for="maxDelay">Retardo Máximo (s):</label>
+                <input type="number" id="maxDelay" value="4.0" min="1.0" step="0.1">
             </div>
-            <button id="startButton">INICIAR</button>
+            
+            <div class="input-group">
+                <label for="parTime">Tiempo Par (s):</label>
+                <input type="number" id="parTime" value="1.5" min="0.5" step="0.1">
+            </div>
+
+            <div class="input-group">
+                <label for="repetitions">Repeticiones (Sets):</label>
+                <input type="number" id="repetitions" value="10" min="1">
+            </div>
+            <div class="input-group">
+                <label for="restTime">Descanso entre Sets (s):</label>
+                <input type="number" id="restTime" value="3.0" min="1.0" step="0.1">
+            </div>
+
+            <button id="startButton">INICIAR ENTRENAMIENTO</button>
             <button id="stopButton" disabled>DETENER</button>
         </div>
         
         <div class="display-area">
-            <p id="status">Configura y pulsa INICIAR</p>
-            <p id="counter">---</p>
+            <p id="status">✅ Configura tus parámetros y comienza.</p>
+            <p id="counter">LISTO</p>
         </div>
     </div>
     <script src="script.js"></script>
