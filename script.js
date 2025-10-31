@@ -26,7 +26,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
 let isCountingTime = false;
-let speechAvailable = 'speechSynthesis' in window; 
+let speechAvailable = 'speechSynthesis' in window; // Comprobación de disponibilidad de voz
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
@@ -76,12 +76,12 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz LISTO?
+// 3. Voz PREPARADO? (ACTUALIZADO: TEXTO)
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
         
-        const utterance = new SpeechSynthesisUtterance("LISTO?"); 
+        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); // Texto cambiado a "PREPARADO?"
         utterance.lang = 'es-ES'; 
         utterance.rate = 1.0; 
         
@@ -97,7 +97,7 @@ function readyVoice() {
         
         window.speechSynthesis.speak(utterance);
     } else {
-        statusDisplay.textContent = `LISTO... ESPERANDO SEÑAL`;
+        statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
         console.warn("La API de síntesis de voz no está soportada o no está disponible.");
     }
 }
@@ -174,7 +174,6 @@ function runRepetition() {
 
     const currentMode = modeSelector.value;
     
-    // Ahora SIEMPRE comprobamos contra totalRepetitions (ya no hay modo libre)
     if (currentRepetition >= totalRepetitions) {
         stopTimer(true);
         return;
@@ -213,7 +212,7 @@ function runRepetition() {
     createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-    // Llama a la voz "LISTO?"
+    // Llama a la voz "PREPARADO?"
     readyVoice();
     
     const randomDelay = getRandomDelay(minDelay, maxDelay);
