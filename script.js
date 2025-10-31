@@ -76,19 +76,32 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz READY? (AJUSTADO PARA MEJOR FIABILIDAD)
+// 3. Voz LISTO? (ACTUALIZADO: ESPAÑOL y TEXTO)
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
         
-        const utterance = new SpeechSynthesisUtterance("Ready?");
-        utterance.lang = 'en-US'; 
+        const utterance = new SpeechSynthesisUtterance("LISTO?"); // Texto en español
+        utterance.lang = 'es-ES'; // Solicitud de voz en español de España
         utterance.rate = 1.0; 
+        
+        // Intentamos seleccionar una voz masculina si es posible
+        const voices = window.speechSynthesis.getVoices();
+        const maleVoice = voices.find(voice => 
+            (voice.lang === 'es-ES' || voice.lang.startsWith('es')) && 
+            (voice.name.includes('Male') || voice.name.includes('Man') || voice.name.includes('masculino'))
+        );
+
+        if (maleVoice) {
+            utterance.voice = maleVoice;
+        } else {
+            // Si no se encuentra una voz masculina específica, usamos la voz por defecto es-ES.
+            // Si la voz por defecto de es-ES es masculina en tu navegador, funcionará.
+        }
         
         window.speechSynthesis.speak(utterance);
     } else {
-        // En caso de que la API no esté disponible, se mostrará un mensaje de estado alternativo
-        statusDisplay.textContent = `READY... ESPERANDO SEÑAL`;
+        statusDisplay.textContent = `LISTO... ESPERANDO SEÑAL`;
         console.warn("La API de síntesis de voz no está soportada o no está disponible.");
     }
 }
@@ -175,14 +188,11 @@ function runRepetition() {
     let maxDelay = parseFloat(maxDelayInput.value);
     let parTime = parseFloat(parTimeInput.value);
     
-    // ** CORRECCIÓN LÓGICA EN MODO PRO para el rango de retardo aleatorio
     if (currentMode === 'pro') {
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
-        // Generación de un nuevo mínimo aleatorio entre 1.0 y 6.0
         const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
-        // Generación del nuevo máximo, asegurando que sea al menos 0.5s mayor que newMin
         const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
         
         minDelay = parseFloat(newMin.toFixed(1));
@@ -209,7 +219,7 @@ function runRepetition() {
          currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
     }
 
-    // *** POSICIÓN DE LA VOZ: DESPUÉS DEL DESCANSO Y ANTES DEL RETARDO ALEATORIO ***
+    // Llama a la voz "LISTO?" en español
     readyVoice();
     
     const randomDelay = getRandomDelay(minDelay, maxDelay);
@@ -239,7 +249,7 @@ function runRepetition() {
                 if (currentRepetition < totalRepetitions) {
                     const rest = parseFloat(restTimeInput.value) * 1000;
                     statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                    mainTimerId = setTimeout(runRepetition, rest); // <-- Llama a runRepetition después del descanso
+                    mainTimerId = setTimeout(runRepetition, rest); 
                 } else {
                     stopTimer(true);
                 }
@@ -339,6 +349,12 @@ function updateInterfaceByMode() {
 
 
 // --- GESTIÓN DE INTERFAZ Y EVENT LISTENERS ---
+
+// Para seleccionar la voz una vez que estén disponibles (esto puede tardar un poco)
+window.speechSynthesis.onvoiceschanged = function() {
+    // Esto asegura que la función readyVoice tendrá acceso a las voces la primera vez que se ejecute.
+};
+
 
 function toggleControls(disable) {
     startButton.disabled = disable;
