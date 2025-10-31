@@ -9,12 +9,13 @@ const stopButton = document.getElementById('stopButton');
 const statusDisplay = document.getElementById('status');
 const counterDisplay = document.getElementById('counter');
 const currentSetDisplay = document.getElementById('currentSet');
+const logTableBody = document.querySelector('#logTable tbody'); 
 
 // Variables de estado del Timer
-let audioContext = null; // Se inicializará con el primer clic del usuario
-let mainTimerId = null; // ID para setTimeout (delay/par time)
-let animationFrameId = null; // ID para requestAnimationFrame (cronómetro)
-let startTime = 0; // Tiempo de inicio del cronómetro
+let audioContext = null; 
+let mainTimerId = null;
+let animationFrameId = null;
+let startTime = 0;
 let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
@@ -22,20 +23,25 @@ let isCountingTime = false;
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
-// Intenta inicializar o reanudar AudioContext al primer clic.
-function startAudioContext() {
+// Inicializa o reanuda el AudioContext (DEBE ser llamado por un evento de clic)
+function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    // Forzar reanudación en caso de que esté suspendido
     if (audioContext.state === 'suspended') {
         audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
-    return audioContext;
 }
 
-// Función para generar un pitido (se asegura de usar el contexto)
+// Función para generar un pitido
 function playBeep(frequency, duration) {
-    const context = startAudioContext();
+    if (!audioContext) {
+        console.warn("AudioContext no inicializado. Asegúrese de hacer clic en 'Iniciar'.");
+        return;
+    }
+    
+    const context = audioContext;
     const oscillator = context.createOscillator();
     const gainNode = context.createGain();
 
@@ -51,43 +57,38 @@ function playBeep(frequency, duration) {
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// 1. Pitido de INICIO (Frecuencia alta)
+// 1. Pitido de INICIO
 function startBeep() {
-    playBeep(1500, 100); // Agudo, corto y penetrante
+    playBeep(1500, 100); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
-    
-    // Iniciar el cronómetro
     startTimerDisplay();
 }
 
-// 2. Pitido de PAR TIME (Doble pitido grave)
+// 2. Pitido de PAR TIME
 function parTimeBeep() {
-    stopTimerDisplay(); // Detener el cronómetro
-
+    stopTimerDisplay(); 
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
-    statusDisplay.textContent = `TIEMPO PAR: ${parTimeInput.value}s`;
+    statusDisplay.textContent = `TIEMPO PAR FINALIZADO. REGISTRA TU TIEMPO.`;
 }
 
 // --- FUNCIONES DE CRONÓMETRO DE ALTA PRECISIÓN ---
 
-// Inicia el cronómetro visual
 function startTimerDisplay() {
     startTime = Date.now();
     isCountingTime = true;
     updateTimerDisplay();
 }
 
-// Detiene el cronómetro visual
 function stopTimerDisplay() {
     isCountingTime = false;
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
     }
 }
 
-// Función que actualiza el display del cronómetro (usando requestAnimationFrame para precisión)
 function updateTimerDisplay() {
     if (!isCountingTime) return;
 
@@ -95,18 +96,70 @@ function updateTimerDisplay() {
     
     // Formatear a S.cs (Segundos.Centésimas)
     const seconds = Math.floor(elapsedTime / 1000);
-    const centiseconds = Math.floor((elapsedTime % 1000) / 10); // Centésimas de segundo
+    const centiseconds = Math.floor((elapsedTime % 1000) / 10);
 
     const formattedTime = `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
     counterDisplay.textContent = formattedTime;
 
-    // Llamar a sí misma en el siguiente ciclo de animación del navegador
     animationFrameId = requestAnimationFrame(updateTimerDisplay);
+}
+
+// --- LÓGICA DE REGISTRO ---
+
+function clearLog() {
+    logTableBody.innerHTML = '';
+}
+
+function createLogEntry(setNumber, parTime) {
+    const row = logTableBody.insertRow();
+    row.id = `set-${setNumber}`;
+    
+    let cell1 = row.insertCell();
+    cell1.textContent = setNumber;
+    
+    let cell2 = row.insertCell();
+    cell2.textContent = parTime;
+
+    let cell3 = row.insertCell();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '0.00';
+    input.disabled = true; 
+    
+    cell3.appendChild(input);
+    
+    // Listener para programar el siguiente set al pulsar ENTER
+    input.addEventListener('keyup', (event) => {
+        if (event.key === 'Enter') {
+             // Validar formato (opcional pero recomendado)
+             const timeValue = parseFloat(input.value);
+             if (isNaN(timeValue) || timeValue <= 0) {
+                 input.value = '';
+                 input.placeholder = 'Inválido';
+                 return;
+             }
+             
+             // Deshabilitar la entrada después de registrar
+             input.disabled = true; 
+             
+             // Si el timer está en descanso, iniciar el siguiente set
+             if (isRunning && currentRepetition <= totalRepetitions) {
+                 const rest = parseFloat(restTimeInput.value) * 1000;
+                 statusDisplay.textContent = `DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
+                 mainTimerId = setTimeout(runRepetition, rest); 
+             } else if (currentRepetition > totalRepetitions) {
+                 // Si fue el último set
+                 stopTimer(true); 
+             }
+        }
+    });
+
+    logTableBody.appendChild(row);
+    return row;
 }
 
 // --- LÓGICA PRINCIPAL DEL ENTRENAMIENTO ---
 
-// Genera un retardo aleatorio (en milisegundos)
 function getRandomDelay(min, max) {
     const minMs = parseFloat(min) * 1000;
     const maxMs = parseFloat(max) * 1000;
@@ -114,12 +167,11 @@ function getRandomDelay(min, max) {
     return delay;
 }
 
-// Ejecuta un ciclo de repetición (Set)
 function runRepetition() {
     if (!isRunning) return;
 
     if (currentRepetition > totalRepetitions) {
-        stopTimer(true); // Finalización exitosa
+        stopTimer(true);
         return;
     }
 
@@ -127,12 +179,14 @@ function runRepetition() {
     const max = maxDelayInput.value;
     const parTimeMs = parseFloat(parTimeInput.value) * 1000;
 
-    // Validación
     if (parseFloat(min) >= parseFloat(max)) {
         statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor que el Máx.";
         stopTimer(false);
         return;
     }
+    
+    const currentRow = createLogEntry(currentRepetition, parTimeInput.value);
+    
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
     const randomDelay = getRandomDelay(min, max);
@@ -152,17 +206,23 @@ function runRepetition() {
 
             parTimeBeep();
             
+            // Al sonar el Pitido Par, habilitar el campo de entrada y enfocarlo
+            const inputField = currentRow.querySelector('input');
+            if (inputField) {
+                inputField.disabled = false;
+                inputField.focus();
+            }
+            
             currentRepetition++;
             
+            // Si es la última repetición, no programamos descanso, solo esperamos el registro del usuario.
             if (currentRepetition <= totalRepetitions) {
-                // Programa el descanso antes de la siguiente repetición
-                const rest = parseFloat(restTimeInput.value) * 1000;
-                statusDisplay.textContent = `DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                
-                mainTimerId = setTimeout(runRepetition, rest); 
+                // El siguiente set se programa al pulsar ENTER en el campo de registro.
+                statusDisplay.textContent += ' REGISTRA TU TIEMPO y pulsa ENTER.';
             } else {
-                runRepetition(); // Llama para finalizar la sesión
+                 statusDisplay.textContent = 'ÚLTIMO SET. REGISTRA TU TIEMPO y pulsa ENTER.';
             }
+
         }, parTimeMs);
         
     }, randomDelay);
@@ -170,12 +230,8 @@ function runRepetition() {
 
 // Inicia el temporizador
 function startTimer() {
-    // Asegurarse de que el contexto de audio esté activo al primer clic
-    startAudioContext();
-    
     if (isRunning) return;
 
-    // Obtener y validar valores
     totalRepetitions = parseInt(repetitionsInput.value);
     
     if (totalRepetitions < 1) {
@@ -183,14 +239,11 @@ function startTimer() {
         return;
     }
 
-    // Configuración inicial
     currentRepetition = 1;
     isRunning = true;
     
-    // Control de interfaz
     toggleControls(true);
-
-    // Inicio del ciclo
+    clearLog();
     runRepetition();
 }
 
@@ -200,10 +253,11 @@ function stopTimer(completed = false) {
     stopTimerDisplay();
     isRunning = false;
     
-    // Control de interfaz
     toggleControls(false);
 
-    // Actualiza el estado
+    // Si se detiene manualmente antes del input, deshabilitar campos abiertos
+    document.querySelectorAll('#logTable input:not([disabled])').forEach(input => input.disabled = true);
+    
     if (completed) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
@@ -214,7 +268,6 @@ function stopTimer(completed = false) {
     currentSetDisplay.textContent = 'Set: 0/0';
 }
 
-// Función auxiliar para gestionar la interfaz
 function toggleControls(disable) {
     startButton.disabled = disable;
     stopButton.disabled = !disable;
@@ -225,6 +278,11 @@ function toggleControls(disable) {
     restTimeInput.disabled = disable;
 }
 
-// Event Listeners
-startButton.addEventListener('click', startTimer);
+// EVENT LISTENERS CLAVE
+// 🎯 Inicializar el AudioContext en el evento de clic del botón (Garantía de Sonido)
+startButton.addEventListener('click', () => {
+    initAudioContext(); 
+    startTimer();
+});
+
 stopButton.addEventListener('click', () => stopTimer(false));
