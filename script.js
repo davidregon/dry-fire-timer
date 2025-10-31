@@ -1,3 +1,4 @@
+
 // --- DRY FIRE REFERENCES (EXISTING) ---
 const dryFireTab = document.getElementById('dryFireTab');
 const mmaTab = document.getElementById('mmaTab');
@@ -20,7 +21,7 @@ const maxDelayGroup = document.getElementById('maxDelayGroup');
 const container = document.querySelector('.container');
 const displayArea = document.querySelector('.display-area');
 const logPanel = document.getElementById('logPanel');
-const headerMotto = document.getElementById('header-motto'); 
+const headerMotto = document.getElementById('header-motto'); // Referencia para el borde y color
 
 // --- MMA TIMER REFERENCES (NEW) ---
 const mmaModeSelector = document.getElementById('mmaModeSelector');
@@ -51,7 +52,6 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
 let speechAvailable = 'speechSynthesis' in window; 
-let speechInitialized = false; 
 
 // --- MMA TIMER STATE ---
 let currentRound = 0;
@@ -62,16 +62,20 @@ let currentRestDuration = 0;
 
 
 // ----------------------------------------------------
-// --- FUNCIONES DE AUDIO GARANTIZADAS ---
+// --- FUNCIONES DE AUDIO GARANTIZADAS (CORRECCIÓN CLAVE) ---
 // ----------------------------------------------------
 
+// CORRECCIÓN CLAVE: Inicializa AudioContext y devuelve una Promesa para asegurar la reanudación
 function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    // Si el contexto está suspendido (requiere interacción del usuario)
     if (audioContext.state === 'suspended') {
+        // Devolvemos la promesa de reanudación
         return audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
+    // Devolvemos una promesa resuelta si ya está corriendo o inicializado
     return Promise.resolve();
 }
 
@@ -112,48 +116,26 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz PREPARADO? - DRY FIRE (SOLUCIÓN DEFINITIVA con Timeout de Respaldo)
+// 3. Voz PREPARADO? - DRY FIRE
 function readyVoice() {
-    // Promesa que resuelve después de 2 segundos (tiempo suficiente para "PREPARADO?")
-    const timeoutPromise = new Promise(resolve => setTimeout(() => {
-        console.warn("Voz forzada a resolverse por timeout.");
-        resolve();
-    }, 2000)); 
+    if (speechAvailable) {
+        window.speechSynthesis.cancel(); 
+        
+        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
+        utterance.lang = 'es-ES'; 
+        utterance.rate = 1.0; 
+        
+        const voices = window.speechSynthesis.getVoices();
+        const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
 
-    // Promesa que resuelve cuando el speech termina
-    const speechPromise = new Promise(resolve => {
-        if (speechAvailable) {
-            window.speechSynthesis.cancel(); 
-            
-            const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
-            utterance.lang = 'es-ES'; 
-            utterance.rate = 1.0; 
-            
-            utterance.onend = () => {
-                resolve(); 
-            };
-            
-            utterance.onerror = (e) => {
-                console.error("SpeechSynthesis error:", e);
-                resolve(); 
-            };
-
-            const voices = window.speechSynthesis.getVoices();
-            const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
-
-            if (spanishVoice) {
-                utterance.voice = spanishVoice;
-            } 
-            
-            window.speechSynthesis.speak(utterance);
-        } else {
-            statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
-            resolve();
-        }
-    });
-    
-    // Promise.race() resuelve cuando la primera promesa se completa (voz o timeout).
-    return Promise.race([speechPromise, timeoutPromise]);
+        if (spanishVoice) {
+            utterance.voice = spanishVoice;
+        } 
+        
+        window.speechSynthesis.speak(utterance);
+    } else {
+        statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
+    }
 }
 
 // ----------------------------------------------------
@@ -204,8 +186,7 @@ function getRandomDelay(min, max) {
     return delay;
 }
 
-// runRepetition AHORA ES ASÍNCRONA y robusta
-async function runRepetition() {
+function runRepetition() {
     if (!isRunningDryFire) return;
 
     const currentMode = modeSelector.value;
@@ -251,49 +232,46 @@ async function runRepetition() {
     createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
+    readyVoice();
     
     const delayToUse = getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
-    statusDisplay.textContent = `ESPERANDO SEÑAL...`;
-    
-    // 1. Decir "PREPARADO?" y esperar a que la voz termine (await)
-    // Se garantiza que no se quede colgado gracias a Promise.race en readyVoice().
-    await readyVoice(); 
 
-    // 2. Esperamos el Retardo Aleatorio (delayToUse)
-    await new Promise(resolve => {
-        // Guardamos el ID del setTimeout por si se pulsa DETENER
-        mainTimerId = setTimeout(resolve, delayToUse);
-    });
-    
-    // Si el temporizador se detuvo mientras esperábamos el delay (por mainTimerId = setTimeout)
-    if (!isRunningDryFire) return; 
-    
-    // 3. Activamos el pitido de FUEGO
-    startBeep();
-    
-    // 4. Esperamos el Tiempo Límite (parTimeMs)
+    if (!speechAvailable) {
+        statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
+    } else {
+        statusDisplay.textContent = `ESPERANDO SEÑAL...`;
+    }
+
+    // Paso 1: Espera el Retardo Aleatorio -> startBeep
     mainTimerId = setTimeout(() => {
         if (!isRunningDryFire) return;
-
-        parTimeBeep();
         
-        // Programar el descanso y el siguiente set
-        if (currentRepetition < totalRepetitions) {
-            const rest = parseFloat(restTimeInput.value) * 1000;
-            statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-            // La siguiente repetición se programa con setTimeout
-            mainTimerId = setTimeout(runRepetition, rest); 
-        } else {
-            stopDryFire(true);
-        }
+        startBeep();
+        
+        // Paso 2: Espera el Tiempo Límite -> parTimeBeep y programar descanso
+        mainTimerId = setTimeout(() => {
+            if (!isRunningDryFire) return;
 
-    }, parTimeMs);
+            parTimeBeep();
+            
+            // Programar el descanso y el siguiente set
+            if (currentRepetition < totalRepetitions) {
+                const rest = parseFloat(restTimeInput.value) * 1000;
+                statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
+                mainTimerId = setTimeout(runRepetition, rest); 
+            } else {
+                stopDryFire(true);
+            }
+
+        }, parTimeMs);
+        
+    }, delayToUse); 
 }
 
 
-// FUNCIÓN DE INICIO DRY FIRE (SIMPLE DE NUEVO)
+// FUNCIÓN DE INICIO DRY FIRE
 function startDryFire() {
     if (isRunningDryFire) return;
     
@@ -312,10 +290,6 @@ function startDryFire() {
     
     toggleDryFireControls(true);
     clearDryFireLog();
-    
-    speechInitialized = true; 
-    
-    // runRepetition() es asíncrona, se ejecuta inmediatamente.
     runRepetition();
 }
 
@@ -335,7 +309,7 @@ function stopDryFire(completed = false) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
     } else {
-        const setsDone = currentRepetition > 0 ? currentRepetition : 0; 
+        const setsDone = currentRepetition > 0 ? currentRepetition - 1 : 0;
         statusDisplay.textContent = `DETENIDO. ${setsDone} SETS REALIZADOS`;
         counterDisplay.textContent = 'PAUSA';
     }
@@ -406,7 +380,7 @@ function updateDryFireInterfaceByMode() {
 
 
 // ----------------------------------------------------
-// --- MMA TIMER LOGIC (Mantenido) ---
+// --- MMA TIMER LOGIC ---
 // ----------------------------------------------------
 
 function updateMMAInterfaceByMode() {
@@ -444,7 +418,7 @@ function getRoundDuration() {
 function startMMA() {
     if (isRunningMMA) return;
     initAudioContext();
-    stopDryFire(false); 
+    stopDryFire(false); // Detiene Dry Fire si estaba corriendo
 
     totalRounds = parseInt(mmaRoundsInput.value);
     currentRestDuration = parseInt(mmaRestTimeInput.value);
@@ -505,6 +479,7 @@ function runMMASequence() {
         return;
     }
 
+    // 1. INICIAR ASALTO (ROUND)
     currentRound++;
     isRoundTime = true;
     currentRoundDuration = getRoundDuration();
@@ -521,6 +496,7 @@ function runMMASequence() {
 function startRest() {
     if (!isRunningMMA) return;
 
+    // 2. INICIAR DESCANSO (REST)
     isRoundTime = false;
     
     if (currentRound < totalRounds) {
@@ -539,6 +515,7 @@ function startRest() {
 function startMMACounter(duration, callback) {
     let timeLeft = duration;
     
+    // Clear any existing interval to prevent overlap
     clearInterval(mmaTimerId); 
 
     function updateCounter() {
@@ -606,6 +583,7 @@ function setDryFireStyle() {
     document.querySelector('h1').style.textShadow = greenShadow;
     document.getElementById('counter').style.color = green;
     
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('startButton').style.backgroundColor = green;
     document.getElementById('stopButton').style.backgroundColor = '#ff3d00';
 }
@@ -623,6 +601,7 @@ function setMMAStyle() {
     document.querySelector('h1').style.textShadow = redShadow;
     document.getElementById('mmaCounter').style.color = red;
     
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('mmaStartButton').style.backgroundColor = red;
     document.getElementById('mmaStopButton').style.backgroundColor = '#00e676';
 }
@@ -650,12 +629,12 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// Event Listener de INICIO DRY FIRE 
+// CORRECCIÓN DE INICIO DRY FIRE: Usar async/await para garantizar el audio.
 startButton.addEventListener('click', async () => {
-    // 1. Garantizamos que AudioContext esté listo
+    // 1. Aseguramos que el AudioContext se inicialice y se reanude
     await initAudioContext(); 
     
-    // 2. Iniciamos el flujo. runRepetition() es asíncrona y espera la voz.
+    // 2. Solo después de que el audio esté listo, iniciamos el flujo del temporizador
     startDryFire(); 
 });
 
@@ -670,9 +649,10 @@ mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
 
 // Inicialización al cargar
 document.addEventListener('DOMContentLoaded', () => {
+    // initAudioContext(); // No se llama aquí, se llama en el click.
     updateDryFireInterfaceByMode();
     updateMMAInterfaceByMode();
-    setDryFireStyle(); 
+    setDryFireStyle(); // Establece el estilo inicial como Dry Fire
     
     // Sincronizar retardo en modo manual
     minDelayInput.addEventListener('change', () => {
