@@ -1,4 +1,5 @@
 // Referencias a los elementos del DOM
+const modeSelector = document.getElementById('modeSelector'); 
 const minDelayInput = document.getElementById('minDelay');
 const maxDelayInput = document.getElementById('maxDelay');
 const parTimeInput = document.getElementById('parTime');
@@ -10,6 +11,11 @@ const statusDisplay = document.getElementById('status');
 const counterDisplay = document.getElementById('counter');
 const currentSetDisplay = document.getElementById('currentSet');
 const logTableBody = document.querySelector('#logTable tbody'); 
+const logPanel = document.getElementById('logPanel'); 
+const parTimeGroup = document.getElementById('parTimeGroup');
+const repetitionsGroup = document.getElementById('repetitionsGroup');
+const restTimeGroup = document.getElementById('restTimeGroup');
+const repRestSeparator = document.getElementById('repRestSeparator');
 
 // Variables de estado del Timer
 let audioContext = null; 
@@ -57,20 +63,20 @@ function playBeep(frequency, duration) {
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// 1. Pitido de INICIO
+// 1. Pitido de INICIO (High Beep)
 function startBeep() {
     playBeep(1500, 100); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
-// 2. Pitido de PAR TIME
+// 2. Pitido de PAR TIME (Double Low Beep)
 function parTimeBeep() {
     stopTimerDisplay(); 
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
-    statusDisplay.textContent = `TIEMPO PAR FINALIZADO. REGISTRA TU TIEMPO.`;
+    statusDisplay.textContent = `TIEMPO PAR FINALIZADO.`;
 }
 
 // --- FUNCIONES DE CRONÓMETRO DE ALTA PRECISIÓN ---
@@ -131,7 +137,6 @@ function createLogEntry(setNumber, parTime) {
     // Listener para programar el siguiente set al pulsar ENTER
     input.addEventListener('keyup', (event) => {
         if (event.key === 'Enter') {
-             // Validar formato (opcional pero recomendado)
              const timeValue = parseFloat(input.value);
              if (isNaN(timeValue) || timeValue <= 0) {
                  input.value = '';
@@ -139,10 +144,9 @@ function createLogEntry(setNumber, parTime) {
                  return;
              }
              
-             // Deshabilitar la entrada después de registrar
              input.disabled = true; 
              
-             // Si el timer está en descanso, iniciar el siguiente set
+             // Si aún quedan repeticiones, programar el descanso y el siguiente set
              if (isRunning && currentRepetition <= totalRepetitions) {
                  const rest = parseFloat(restTimeInput.value) * 1000;
                  statusDisplay.textContent = `DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
@@ -158,7 +162,8 @@ function createLogEntry(setNumber, parTime) {
     return row;
 }
 
-// --- LÓGICA PRINCIPAL DEL ENTRENAMIENTO ---
+
+// --- LÓGICA PRINCIPAL DE LOS MODOS ---
 
 function getRandomDelay(min, max) {
     const minMs = parseFloat(min) * 1000;
@@ -170,29 +175,61 @@ function getRandomDelay(min, max) {
 function runRepetition() {
     if (!isRunning) return;
 
-    if (currentRepetition > totalRepetitions) {
-        stopTimer(true);
-        return;
+    const currentMode = modeSelector.value;
+    
+    if (currentMode !== 'free') {
+        if (currentRepetition > totalRepetitions) {
+            stopTimer(true);
+            return;
+        }
+    } else {
+        // En modo libre, la cuenta solo es para referencia
+        currentRepetition++;
     }
 
-    const min = minDelayInput.value;
-    const max = maxDelayInput.value;
-    const parTimeMs = parseFloat(parTimeInput.value) * 1000;
+    // 1. OBTENER PARÁMETROS DE RETARDO
+    let minDelay = parseFloat(minDelayInput.value);
+    let maxDelay = parseFloat(maxDelayInput.value);
+    let parTime = parseFloat(parTimeInput.value);
+    
+    // Lógica para Modo Aleatorio PRO: Retardos variables en cada set
+    if (currentMode === 'pro') {
+        // Rango amplio para la variación
+        const rangeMin = 1.0;
+        const rangeMax = 6.0;
 
-    if (parseFloat(min) >= parseFloat(max)) {
+        // Nuevos min y max generados de forma aleatoria y luego ajustados
+        const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
+        const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
+        
+        minDelay = parseFloat(newMin.toFixed(1));
+        maxDelay = parseFloat(newMax.toFixed(1));
+        
+        // Actualizar la interfaz para que el usuario sepa los nuevos parámetros de este set
+        minDelayInput.value = minDelay;
+        maxDelayInput.value = maxDelay;
+    }
+
+    const parTimeMs = parTime * 1000;
+    
+    if (minDelay >= maxDelay) {
         statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor que el Máx.";
         stopTimer(false);
         return;
     }
-    
-    const currentRow = createLogEntry(currentRepetition, parTimeInput.value);
-    
-    currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-    const randomDelay = getRandomDelay(min, max);
+    let currentRow = null;
+    if (currentMode === 'manual' || currentMode === 'pro') {
+        currentRow = createLogEntry(currentRepetition, parTime.toFixed(2));
+        currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
+    } else {
+         currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
+    }
+
+    const randomDelay = getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
-    statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL (Set ${currentRepetition})`;
+    statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
 
     // Paso 1: Espera el Retardo Aleatorio -> startBeep
     mainTimerId = setTimeout(() => {
@@ -200,43 +237,57 @@ function runRepetition() {
         
         startBeep();
         
-        // Paso 2: Espera el Tiempo Par -> parTimeBeep
-        mainTimerId = setTimeout(() => {
-            if (!isRunning) return;
+        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Par -> parTimeBeep
+        if (currentMode === 'manual' || currentMode === 'pro') {
+            mainTimerId = setTimeout(() => {
+                if (!isRunning) return;
 
-            parTimeBeep();
-            
-            // Al sonar el Pitido Par, habilitar el campo de entrada y enfocarlo
-            const inputField = currentRow.querySelector('input');
-            if (inputField) {
-                inputField.disabled = false;
-                inputField.focus();
-            }
-            
-            currentRepetition++;
-            
-            // Si es la última repetición, no programamos descanso, solo esperamos el registro del usuario.
-            if (currentRepetition <= totalRepetitions) {
-                // El siguiente set se programa al pulsar ENTER en el campo de registro.
-                statusDisplay.textContent += ' REGISTRA TU TIEMPO y pulsa ENTER.';
-            } else {
-                 statusDisplay.textContent = 'ÚLTIMO SET. REGISTRA TU TIEMPO y pulsa ENTER.';
-            }
+                parTimeBeep();
+                
+                // Habilitar input de registro
+                const inputField = currentRow.querySelector('input');
+                if (inputField) {
+                    inputField.disabled = false;
+                    inputField.focus();
+                }
+                
+                currentRepetition++;
+                
+                if (currentRepetition <= totalRepetitions) {
+                    statusDisplay.textContent += ' REGISTRA TU TIEMPO y pulsa ENTER.';
+                } else {
+                     statusDisplay.textContent = 'ÚLTIMO SET. REGISTRA TU TIEMPO y pulsa ENTER.';
+                }
 
-        }, parTimeMs);
+            }, parTimeMs);
+        } else {
+            // Lógica para Modo Libre: Solo hay beep de inicio, luego pasa al descanso
+            const rest = parseFloat(restTimeInput.value) * 1000;
+            statusDisplay.textContent = `DESCANSO. PRÓXIMO INICIO EN ${rest / 1000}s...`;
+            
+            // Programar el siguiente set de Modo Libre
+            mainTimerId = setTimeout(runRepetition, rest);
+        }
         
     }, randomDelay);
 }
 
-// Inicia el temporizador
+
+// FUNCIÓN DE INICIO CON LÓGICA DE MODO
 function startTimer() {
     if (isRunning) return;
-
-    totalRepetitions = parseInt(repetitionsInput.value);
     
-    if (totalRepetitions < 1) {
-        alert("El número de Repeticiones debe ser 1 o más.");
-        return;
+    const currentMode = modeSelector.value;
+    
+    // Validación general para modos no libres
+    if (currentMode !== 'free') {
+        totalRepetitions = parseInt(repetitionsInput.value);
+        if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
+            alert("El número de Repeticiones debe ser 1 o más.");
+            return;
+        }
+    } else {
+        totalRepetitions = '∞'; // Infinito para el modo libre
     }
 
     currentRepetition = 1;
@@ -268,21 +319,73 @@ function stopTimer(completed = false) {
     currentSetDisplay.textContent = 'Set: 0/0';
 }
 
+
+// Función auxiliar para gestionar la interfaz según el modo
+function updateInterfaceByMode() {
+    const mode = modeSelector.value;
+    
+    // Ocultar/Mostrar Par Time
+    const showParTime = mode !== 'free';
+    parTimeGroup.classList.toggle('hidden', !showParTime);
+
+    // Ocultar/Mostrar Repeticiones y Descanso
+    const showRepRest = mode !== 'free';
+    repetitionsGroup.classList.toggle('hidden', !showRepRest);
+    restTimeGroup.classList.toggle('hidden', !showRepRest);
+    repRestSeparator.classList.toggle('hidden', !showRepRest);
+
+    // Ocultar/Mostrar Log
+    const showLog = mode === 'manual' || mode === 'pro';
+    logPanel.classList.toggle('hidden', !showLog);
+    
+    // Habilitar/Deshabilitar Retardos en modo 'pro' (para dejar claro que cambian solos)
+    const disableDelayInputs = mode === 'pro';
+    minDelayInput.disabled = disableDelayInputs;
+    maxDelayInput.disabled = disableDelayInputs;
+    
+    // Si se pasa de Pro a Manual/Libre, restaurar el estado de los inputs
+    if (mode !== 'pro') {
+        minDelayInput.disabled = false;
+        maxDelayInput.disabled = false;
+    }
+    
+    // Mensaje en el botón (opcional)
+    startButton.textContent = (mode === 'free') ? 'INICIAR (LIBRE)' : 'INICIAR';
+    
+    // Resetear display
+    statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
+    counterDisplay.textContent = '00.00';
+    currentSetDisplay.textContent = 'Set: 0/0';
+}
+
+
+// --- GESTIÓN DE INTERFAZ Y EVENT LISTENERS ---
+
 function toggleControls(disable) {
     startButton.disabled = disable;
     stopButton.disabled = !disable;
-    minDelayInput.disabled = disable;
-    maxDelayInput.disabled = disable;
     parTimeInput.disabled = disable;
     repetitionsInput.disabled = disable;
     restTimeInput.disabled = disable;
+    modeSelector.disabled = disable;
+    
+    // Mantener la deshabilitación del Retardo en modo Pro incluso al iniciar
+    if (modeSelector.value !== 'pro') {
+        minDelayInput.disabled = disable;
+        maxDelayInput.disabled = disable;
+    }
 }
 
-// EVENT LISTENERS CLAVE
-// 🎯 Inicializar el AudioContext en el evento de clic del botón (Garantía de Sonido)
+// Inicializar el AudioContext en el evento de clic del botón (Garantía de Sonido)
 startButton.addEventListener('click', () => {
     initAudioContext(); 
     startTimer();
 });
 
 stopButton.addEventListener('click', () => stopTimer(false));
+
+// Listener para cambiar la interfaz al seleccionar el modo
+modeSelector.addEventListener('change', updateInterfaceByMode);
+
+// Inicializar la interfaz al cargar la página
+document.addEventListener('DOMContentLoaded', updateInterfaceByMode);
