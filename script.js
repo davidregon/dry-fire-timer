@@ -20,6 +20,7 @@ const maxDelayGroup = document.getElementById('maxDelayGroup');
 const container = document.querySelector('.container');
 const displayArea = document.querySelector('.display-area');
 const logPanel = document.getElementById('logPanel');
+const headerMotto = document.getElementById('header-motto'); // Referencia para el borde y color
 
 // --- MMA TIMER REFERENCES (NEW) ---
 const mmaModeSelector = document.getElementById('mmaModeSelector');
@@ -38,12 +39,12 @@ const mmaMaxRoundInput = document.getElementById('mmaMaxRound');
 
 // --- GLOBAL VARIABLES ---
 let audioContext = null; 
-let mainTimerId = null; // Usado para Dry Fire setTimeout
-let mmaTimerId = null; // Usado para MMA setInterval
+let mainTimerId = null; 
+let mmaTimerId = null; 
 let animationFrameId = null;
 let startTime = 0;
-let isRunningDryFire = false; // Estado independiente para Dry Fire
-let isRunningMMA = false; // Estado independiente para MMA
+let isRunningDryFire = false; 
+let isRunningMMA = false; 
 
 // --- DRY FIRE STATE ---
 let currentRepetition = 0;
@@ -60,16 +61,21 @@ let currentRestDuration = 0;
 
 
 // ----------------------------------------------------
-// --- FUNCIONES DE AUDIO GARANTIZADAS ---
+// --- FUNCIONES DE AUDIO GARANTIZADAS (CORRECCIÓN CLAVE) ---
 // ----------------------------------------------------
 
+// CORRECCIÓN CLAVE: Inicializa AudioContext y devuelve una Promesa para asegurar la reanudación
 function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    // Si el contexto está suspendido (requiere interacción del usuario)
     if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
+        // Devolvemos la promesa de reanudación
+        return audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
+    // Devolvemos una promesa resuelta si ya está corriendo o inicializado
+    return Promise.resolve();
 }
 
 function playBeep(frequency, duration) {
@@ -128,7 +134,6 @@ function readyVoice() {
         window.speechSynthesis.speak(utterance);
     } else {
         statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
-        console.warn("La API de síntesis de voz no está soportada o no está disponible.");
     }
 }
 
@@ -374,7 +379,7 @@ function updateDryFireInterfaceByMode() {
 
 
 // ----------------------------------------------------
-// --- MMA TIMER LOGIC (EXISTING/REFINED) ---
+// --- MMA TIMER LOGIC ---
 // ----------------------------------------------------
 
 function updateMMAInterfaceByMode() {
@@ -400,7 +405,6 @@ function getRoundDuration() {
         
         const effectiveMin = Math.max(min, 180); 
         
-        // Genera un número aleatorio de minutos entre min/60 y max/60, y luego a segundos
         const randomMinutes = Math.floor(Math.random() * ((max / 60) - (effectiveMin / 60) + 1)) + (effectiveMin / 60);
         
         return randomMinutes * 60; 
@@ -509,6 +513,9 @@ function startRest() {
 
 function startMMACounter(duration, callback) {
     let timeLeft = duration;
+    
+    // Clear any existing interval to prevent overlap
+    clearInterval(mmaTimerId); 
 
     function updateCounter() {
         const minutes = Math.floor(timeLeft / 60);
@@ -563,17 +570,39 @@ function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
 // ----------------------------------------------------
 
 function setDryFireStyle() {
-    container.style.borderColor = '#00e676';
-    displayArea.style.borderColor = '#00e676';
-    document.querySelector('h1').style.color = '#00e676';
-    document.querySelector('h1').style.textShadow = '0 0 5px rgba(0, 230, 118, 0.7)';
+    const green = '#00e676';
+    const greenShadow = '0 0 5px rgba(0, 230, 118, 0.7)';
+    
+    container.style.borderColor = green;
+    displayArea.style.borderColor = green;
+    headerMotto.style.color = green;
+    headerMotto.style.borderBottomColor = green;
+    
+    document.querySelector('h1').style.color = green;
+    document.querySelector('h1').style.textShadow = greenShadow;
+    document.getElementById('counter').style.color = green;
+    
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
+    document.getElementById('startButton').style.backgroundColor = green;
+    document.getElementById('stopButton').style.backgroundColor = '#ff3d00';
 }
 
 function setMMAStyle() {
-    container.style.borderColor = '#ff3d00';
-    displayArea.style.borderColor = '#ff3d00';
-    document.querySelector('h1').style.color = '#ff3d00';
-    document.querySelector('h1').style.textShadow = '0 0 5px rgba(255, 61, 0, 0.7)';
+    const red = '#ff3d00';
+    const redShadow = '0 0 5px rgba(255, 61, 0, 0.7)';
+
+    container.style.borderColor = red;
+    displayArea.style.borderColor = red;
+    headerMotto.style.color = red;
+    headerMotto.style.borderBottomColor = red;
+    
+    document.querySelector('h1').style.color = red;
+    document.querySelector('h1').style.textShadow = redShadow;
+    document.getElementById('mmaCounter').style.color = red;
+    
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
+    document.getElementById('mmaStartButton').style.backgroundColor = red;
+    document.getElementById('mmaStopButton').style.backgroundColor = '#00e676';
 }
 
 // Lógica de cambio de pestaña
@@ -583,7 +612,7 @@ dryFireTab.addEventListener('click', () => {
     dryFireTab.classList.add('active');
     mmaTab.classList.remove('active');
     
-    stopMMA(); // Detiene MMA si estaba corriendo
+    stopMMA(); 
     setDryFireStyle();
     updateDryFireInterfaceByMode();
 });
@@ -594,16 +623,20 @@ mmaTab.addEventListener('click', () => {
     mmaTab.classList.add('active');
     dryFireTab.classList.remove('active');
     
-    stopDryFire(false); // Detiene Dry Fire si estaba corriendo
+    stopDryFire(false); 
     setMMAStyle();
     updateMMAInterfaceByMode();
 });
 
-// Event Listeners para Dry Fire 
-startButton.addEventListener('click', () => {
-    initAudioContext(); 
-    startDryFire(); // Llamada a la función específica Dry Fire
+// CORRECCIÓN DE INICIO DRY FIRE: Usar async/await para garantizar el audio.
+startButton.addEventListener('click', async () => {
+    // 1. Aseguramos que el AudioContext se inicialice y se reanude
+    await initAudioContext(); 
+    
+    // 2. Solo después de que el audio esté listo, iniciamos el flujo del temporizador
+    startDryFire(); 
 });
+
 stopButton.addEventListener('click', () => stopDryFire(false));
 modeSelector.addEventListener('change', updateDryFireInterfaceByMode);
 
@@ -615,7 +648,7 @@ mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
 
 // Inicialización al cargar
 document.addEventListener('DOMContentLoaded', () => {
-    initAudioContext();
+    // initAudioContext(); // No se llama aquí, se llama en el click.
     updateDryFireInterfaceByMode();
     updateMMAInterfaceByMode();
     setDryFireStyle(); // Establece el estilo inicial como Dry Fire
