@@ -51,6 +51,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
 let speechAvailable = 'speechSynthesis' in window; 
+let speechInitialized = false; // Nuevo: Para rastrear si SpeechSynthesis ha sido activado
 
 // --- MMA TIMER STATE ---
 let currentRound = 0;
@@ -117,7 +118,7 @@ function parTimeBeep() {
 
 // 3. Voz PREPARADO? - DRY FIRE
 function readyVoice() {
-    if (speechAvailable) {
+    if (speechAvailable && speechInitialized) { // Solo si SpeechSynthesis ha sido activado
         window.speechSynthesis.cancel(); 
         
         const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
@@ -231,7 +232,7 @@ function runRepetition() {
     createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-    readyVoice();
+    readyVoice(); // LLAMADA A LA VOZ "PREPARADO?"
     
     const delayToUse = getRandomDelay(minDelay, maxDelay);
     
@@ -417,7 +418,7 @@ function getRoundDuration() {
 function startMMA() {
     if (isRunningMMA) return;
     initAudioContext();
-    stopDryFire(false); // Detiene Dry Fire si estaba corriendo
+    stopDryFire(false); 
 
     totalRounds = parseInt(mmaRoundsInput.value);
     currentRestDuration = parseInt(mmaRestTimeInput.value);
@@ -514,7 +515,6 @@ function startRest() {
 function startMMACounter(duration, callback) {
     let timeLeft = duration;
     
-    // Clear any existing interval to prevent overlap
     clearInterval(mmaTimerId); 
 
     function updateCounter() {
@@ -582,7 +582,6 @@ function setDryFireStyle() {
     document.querySelector('h1').style.textShadow = greenShadow;
     document.getElementById('counter').style.color = green;
     
-    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('startButton').style.backgroundColor = green;
     document.getElementById('stopButton').style.backgroundColor = '#ff3d00';
 }
@@ -600,7 +599,6 @@ function setMMAStyle() {
     document.querySelector('h1').style.textShadow = redShadow;
     document.getElementById('mmaCounter').style.color = red;
     
-    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('mmaStartButton').style.backgroundColor = red;
     document.getElementById('mmaStopButton').style.backgroundColor = '#00e676';
 }
@@ -628,12 +626,20 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// CORRECCIÓN DE INICIO DRY FIRE: Usar async/await para garantizar el audio.
+// CORRECCIÓN FINAL DRY FIRE: Usar async/await y activar SpeechSynthesis.
 startButton.addEventListener('click', async () => {
-    // 1. Aseguramos que el AudioContext se inicialice y se reanude
+    // 1. Aseguramos que AudioContext se inicialice y reanude
     await initAudioContext(); 
     
-    // 2. Solo después de que el audio esté listo, iniciamos el flujo del temporizador
+    // 2. Activamos SpeechSynthesis con una pequeña prueba silenciosa (si no está inicializado)
+    if (speechAvailable && !speechInitialized) {
+        const testUtterance = new SpeechSynthesisUtterance(" ");
+        testUtterance.volume = 0; // Silencioso
+        window.speechSynthesis.speak(testUtterance);
+        speechInitialized = true; // Marcamos como inicializado
+    }
+    
+    // 3. Iniciamos el flujo del temporizador
     startDryFire(); 
 });
 
@@ -648,10 +654,9 @@ mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
 
 // Inicialización al cargar
 document.addEventListener('DOMContentLoaded', () => {
-    // initAudioContext(); // No se llama aquí, se llama en el click.
     updateDryFireInterfaceByMode();
     updateMMAInterfaceByMode();
-    setDryFireStyle(); // Establece el estilo inicial como Dry Fire
+    setDryFireStyle(); 
     
     // Sincronizar retardo en modo manual
     minDelayInput.addEventListener('change', () => {
