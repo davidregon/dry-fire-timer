@@ -2,13 +2,16 @@ body {
     font-family: 'Roboto Mono', monospace;
     display: flex;
     justify-content: center;
-    align-items: center;
+    /* CORRECCIÓN: Alinea el contenido al inicio y permite el scroll vertical */
+    align-items: flex-start; 
     min-height: 100vh;
     margin: 0;
     background-color: black; 
     color: #f0f0f0;
     position: relative;
-    overflow: hidden;
+    /* CORRECCIÓN: Permite el scroll vertical si el contenido es demasiado alto */
+    overflow-y: auto; 
+    padding-top: 10px; /* Pequeño espacio superior de seguridad */
 }
 
 /* Pseudo-elemento para el logo de fondo (FDDA4DA2-A2A1-43ED-A32F-5E27C12F6552.jpeg) */
@@ -56,7 +59,8 @@ body::before {
     border: 1px solid #00e676; /* Borde de color de marca */
     z-index: 1;
     position: relative;
-    margin-top: 60px; /* Separación del encabezado fijo */
+    /* Margen ajustado para la frase fija y el padding del body */
+    margin-top: 50px; 
     margin-bottom: 25px;
 }
 
