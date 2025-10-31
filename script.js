@@ -1,3 +1,4 @@
+
 // --- DRY FIRE REFERENCES (EXISTING) ---
 const dryFireTab = document.getElementById('dryFireTab');
 const mmaTab = document.getElementById('mmaTab');
@@ -51,7 +52,6 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
 let speechAvailable = 'speechSynthesis' in window; 
-let speechInitialized = false; // <-- NUEVA VARIABLE DE ESTADO DE VOZ
 
 // --- MMA TIMER STATE ---
 let currentRound = 0;
@@ -62,9 +62,10 @@ let currentRestDuration = 0;
 
 
 // ----------------------------------------------------
-// --- FUNCIONES DE AUDIO GARANTIZADAS ---
+// --- FUNCIONES DE AUDIO GARANTIZADAS (CORRECCIÓN CLAVE) ---
 // ----------------------------------------------------
 
+// CORRECCIÓN CLAVE: Inicializa AudioContext y devuelve una Promesa para asegurar la reanudación
 function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -134,28 +135,6 @@ function readyVoice() {
         window.speechSynthesis.speak(utterance);
     } else {
         statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
-    }
-}
-
-// 4. FUNCIÓN PARA ACTIVAR LA VOZ CON CUALQUIER INTERACCIÓN
-function activateSpeech() {
-    if (speechInitialized || !speechAvailable) return;
-    
-    // Intento de hablar silenciosamente (solo necesita el evento de .speak)
-    const utterance = new SpeechSynthesisUtterance(" ");
-    utterance.volume = 0; 
-    
-    // Si falla, al menos el navegador registra el intento
-    utterance.onerror = (e) => console.error("Error al activar SpeechSynthesis:", e);
-
-    window.speechSynthesis.speak(utterance);
-    
-    // Marcamos como inicializado para no volver a intentarlo
-    speechInitialized = true;
-    
-    // Intentamos activar AudioContext también si está suspendido
-    if (audioContext && audioContext.state === 'suspended') {
-         audioContext.resume().catch(e => console.error("Error al reanudar AudioContext en activación:", e));
     }
 }
 
@@ -262,7 +241,6 @@ function runRepetition() {
     if (!speechAvailable) {
         statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
     } else {
-        // Mantenemos este estado visible mientras la voz habla
         statusDisplay.textContent = `ESPERANDO SEÑAL...`;
     }
 
@@ -549,8 +527,7 @@ function startMMACounter(duration, callback) {
         
         if (timeLeft === 10) {
             if (speechAvailable) {
-                // Notamos que esta voz ya no será bloqueada si activateSpeech funcionó antes.
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Diez segundos")); 
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Diez segundos"));
             }
         }
         if (timeLeft <= 3 && timeLeft > 0) {
@@ -606,6 +583,7 @@ function setDryFireStyle() {
     document.querySelector('h1').style.textShadow = greenShadow;
     document.getElementById('counter').style.color = green;
     
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('startButton').style.backgroundColor = green;
     document.getElementById('stopButton').style.backgroundColor = '#ff3d00';
 }
@@ -623,11 +601,12 @@ function setMMAStyle() {
     document.querySelector('h1').style.textShadow = redShadow;
     document.getElementById('mmaCounter').style.color = red;
     
+    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
     document.getElementById('mmaStartButton').style.backgroundColor = red;
     document.getElementById('mmaStopButton').style.backgroundColor = '#00e676';
 }
 
-// Lógica de cambio de pestaña (Incluye activateSpeech)
+// Lógica de cambio de pestaña
 dryFireTab.addEventListener('click', () => {
     dryFireContent.classList.remove('hidden');
     mmaContent.classList.add('hidden');
@@ -637,7 +616,6 @@ dryFireTab.addEventListener('click', () => {
     stopMMA(); 
     setDryFireStyle();
     updateDryFireInterfaceByMode();
-    activateSpeech(); // <-- ACTIVACIÓN DE VOZ AL CAMBIAR PESTAÑA
 });
 
 mmaTab.addEventListener('click', () => {
@@ -649,7 +627,6 @@ mmaTab.addEventListener('click', () => {
     stopDryFire(false); 
     setMMAStyle();
     updateMMAInterfaceByMode();
-    activateSpeech(); // <-- ACTIVACIÓN DE VOZ AL CAMBIAR PESTAÑA
 });
 
 // CORRECCIÓN DE INICIO DRY FIRE: Usar async/await para garantizar el audio.
@@ -662,34 +639,17 @@ startButton.addEventListener('click', async () => {
 });
 
 stopButton.addEventListener('click', () => stopDryFire(false));
+modeSelector.addEventListener('change', updateDryFireInterfaceByMode);
 
-// Listeners de Configuración Dry Fire (Incluyen activateSpeech)
-modeSelector.addEventListener('change', () => {
-    updateDryFireInterfaceByMode();
-    activateSpeech(); // <-- ACTIVACIÓN DE VOZ AL CAMBIAR MODO
-});
-minDelayInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-maxDelayInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-parTimeInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-repetitionsInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-restTimeInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-
-// Event Listeners para MMA Timer (Incluyen activateSpeech)
+// Event Listeners para MMA Timer 
 mmaStartButton.addEventListener('click', startMMA);
 mmaStopButton.addEventListener('click', stopMMA);
-mmaModeSelector.addEventListener('change', () => {
-    updateMMAInterfaceByMode();
-    activateSpeech(); // <-- ACTIVACIÓN DE VOZ AL CAMBIAR MODO
-});
-mmaRoundTimeInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-mmaRestTimeInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-mmaRoundsInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-mmaMinRoundInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
-mmaMaxRoundInput.addEventListener('input', activateSpeech); // <-- ACTIVACIÓN DE VOZ AL ESCRIBIR
+mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
 
 
 // Inicialización al cargar
 document.addEventListener('DOMContentLoaded', () => {
+    // initAudioContext(); // No se llama aquí, se llama en el click.
     updateDryFireInterfaceByMode();
     updateMMAInterfaceByMode();
     setDryFireStyle(); // Establece el estilo inicial como Dry Fire
