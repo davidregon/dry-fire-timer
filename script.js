@@ -76,12 +76,12 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz PREPARADO? (ACTUALIZADO: TEXTO)
+// 3. Voz PREPARADO?
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
         
-        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); // Texto cambiado a "PREPARADO?"
+        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
         utterance.lang = 'es-ES'; 
         utterance.rate = 1.0; 
         
@@ -166,6 +166,10 @@ function getRandomDelay(min, max) {
     const minMs = parseFloat(min) * 1000;
     const maxMs = parseFloat(max) * 1000;
     const delay = Math.random() * (maxMs - minMs) + minMs;
+    // Si min == max (modo manual), Math.random() dará 0, así que solo devolvemos minMs
+    if (minMs === maxMs) {
+        return minMs;
+    }
     return delay;
 }
 
@@ -200,8 +204,9 @@ function runRepetition() {
 
     const parTimeMs = parTime * 1000;
     
-    if (minDelay >= maxDelay) {
-        statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor que el Máx.";
+    // *** CORRECCIÓN CLAVE AQUÍ: Solo validar si Min es MAYOR que Max, pero no si son iguales ***
+    if (minDelay > maxDelay) { 
+        statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor o igual que el Máx.";
         stopTimer(false);
         return;
     }
@@ -215,7 +220,8 @@ function runRepetition() {
     // Llama a la voz "PREPARADO?"
     readyVoice();
     
-    const randomDelay = getRandomDelay(minDelay, maxDelay);
+    // Aseguramos que si es manual, el retardo sea solo el valor fijo.
+    const delayToUse = (currentMode === 'manual') ? minDelay * 1000 : getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
 
@@ -248,7 +254,7 @@ function runRepetition() {
 
         }, parTimeMs);
         
-    }, randomDelay);
+    }, delayToUse); // Usamos delayToUse
 }
 
 
@@ -315,7 +321,8 @@ function updateInterfaceByMode() {
         minDelayInput.disabled = false;
         maxDelayInput.disabled = false;
         // En modo manual, el rango es fijo (min=max para retardo fijo)
-        minDelayInput.value = maxDelayInput.value; 
+        // Ya no forzamos el valor aquí, sino con los listeners de cambio para permitir ajustes
+        // y con la lógica de ejecución (getRandomDelay).
     }
     
     startButton.textContent = 'INICIAR';
@@ -341,13 +348,15 @@ function toggleControls(disable) {
     restTimeInput.disabled = disable;
     modeSelector.disabled = disable;
     
-    // Solo deshabilitamos los retardos si el modo es Pro Y estamos en ejecución
-    const disableDelayInputs = modeSelector.value === 'pro' || disable;
+    const isPro = modeSelector.value === 'pro';
+    
+    // Solo deshabilitamos los retardos si el modo es Pro O si el timer está en ejecución
+    const disableDelayInputs = isPro || disable;
 
     minDelayInput.disabled = disableDelayInputs;
     maxDelayInput.disabled = disableDelayInputs;
 
-    // Aseguramos que en modo manual, los inputs de retardo se desbloqueen si no estamos corriendo
+    // Si el modo es manual y no estamos corriendo, deben estar habilitados
     if (modeSelector.value === 'manual' && !disable) {
          minDelayInput.disabled = false;
          maxDelayInput.disabled = false;
@@ -364,10 +373,10 @@ stopButton.addEventListener('click', () => stopTimer(false));
 modeSelector.addEventListener('change', updateInterfaceByMode);
 document.addEventListener('DOMContentLoaded', updateInterfaceByMode);
 
-// PEQUEÑO ARREGLO: Forzar el cambio de la interfaz al cargar, para que el modo 'manual' se ajuste correctamente.
+// Event Listeners para forzar que en modo manual min y max sean iguales al cambiarlos
 document.addEventListener('DOMContentLoaded', () => {
     updateInterfaceByMode();
-    // Añadir un listener para forzar que en modo manual min y max sean iguales
+
     minDelayInput.addEventListener('change', () => {
         if (modeSelector.value === 'manual') {
             maxDelayInput.value = minDelayInput.value;
