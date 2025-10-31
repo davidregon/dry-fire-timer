@@ -7,8 +7,8 @@ body {
     margin: 0;
     background-color: black; /* Fondo negro sólido */
     color: #f0f0f0;
-    position: relative; /* Necesario para el pseudoelemento del logo */
-    overflow: hidden; /* Evita scrolls inesperados si el logo es muy grande */
+    position: relative;
+    overflow: hidden;
 }
 
 /* Pseudo-elemento para el logo de fondo */
@@ -19,14 +19,15 @@ body::before {
     left: 0;
     width: 100%;
     height: 100%;
-    /* ¡CAMBIO AQUÍ! Nombre de archivo del logo actualizado */
-    background-image: url('FDDA4DA2-A2A1-43ED-A32F-5E27C12F6552.jpeg'); 
+    /* RUTA CORREGIDA: Asegúrate de que el nombre de archivo es EXACTO */
+    background-image: url("FDDA4DA2-A2A1-43ED-A32F-5E27C12F6552.jpeg"); 
     background-repeat: no-repeat;
-    background-position: center center; /* Centrar el logo */
-    background-size: 70%; /* Ajustar el tamaño del logo, puedes probar 'contain', 'cover' o un porcentaje */
-    filter: brightness(0.5) opacity(0.1); /* Oscurecer y darle transparencia (ajusta valores) */
-    z-index: -1; /* Enviar al fondo, detrás del contenido */
-    pointer-events: none; /* Asegura que no bloquee interacciones */
+    background-position: center center;
+    background-size: 70%; 
+    /* MAYOR VISIBILIDAD: Aumentamos la opacidad */
+    filter: brightness(0.5) opacity(0.25); 
+    z-index: -1; 
+    pointer-events: none;
 }
 
 
@@ -40,7 +41,7 @@ body::before {
     max-width: 480px;
     border: 1px solid #444;
     z-index: 1; /* Asegura que el contenedor esté por encima del logo */
-    position: relative; /* Para que el z-index funcione */
+    position: relative;
 }
 
 h1 {
