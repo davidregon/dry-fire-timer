@@ -167,7 +167,7 @@ button[disabled] {
 }
 
 .log-panel h2 {
-    color: #00e676; /* Mantener el acento */
+    color: #00e676; 
     border-bottom: 1px solid #555;
     margin-bottom: 15px;
 }
@@ -176,12 +176,12 @@ button[disabled] {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 10px;
-    font-size: 0.9em;
+    font-size: 0.8em; /* Reducido un poco por la nueva columna */
 }
 
 #logTable th, #logTable td {
     border: 1px solid #555;
-    padding: 8px;
+    padding: 6px; /* Reducido el padding */
     text-align: center;
 }
 
@@ -196,14 +196,10 @@ button[disabled] {
     color: #f0f0f0;
 }
 
-/* Input para registrar el tiempo */
-#logTable input[type="text"] {
-    width: 60px;
-    padding: 5px;
-    text-align: center;
-    background-color: #1a1a1a;
-    color: #f0f0f0;
-    border: 1px solid #00e676;
+/* Columna de Resultado (Tiempo Límite) */
+#logTable tr td:nth-child(4) {
+    font-weight: bold;
+    color: #ffcc00; /* Un color de acento para la métrica clave */
 }
 
 .note {
