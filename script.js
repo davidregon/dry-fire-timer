@@ -59,14 +59,15 @@ function playBeep(frequency, duration) {
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// 1. Pitido de INICIO (High Beep)
+// 1. Pitido de INICIO (MÁS LARGO Y MÁS AGUDO)
 function startBeep() {
-    playBeep(1500, 100); 
+    // Frecuencia: 2000 Hz (más agudo), Duración: 200 ms (más largo)
+    playBeep(2000, 200); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
-// 2. Pitido de PAR TIME (Double Low Beep)
+// 2. Pitido de TIEMPO LÍMITE (Doble, bajo)
 function parTimeBeep() {
     stopTimerDisplay(); 
     playBeep(400, 150);
@@ -74,6 +75,21 @@ function parTimeBeep() {
 
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
+
+// 3. Voz READY? (NUEVO)
+function readyVoice() {
+    // Usamos la API de síntesis de voz (Text-to-Speech)
+    if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance("Ready?");
+        // Opcional: Configurar idioma o velocidad
+        utterance.lang = 'en-US'; 
+        utterance.rate = 1.0; 
+        window.speechSynthesis.speak(utterance);
+    } else {
+        console.warn("La API de síntesis de voz no está soportada en este navegador.");
+    }
+}
+
 
 // --- FUNCIONES DE CRONÓMETRO DE ALTA PRECISIÓN ---
 
@@ -96,7 +112,6 @@ function updateTimerDisplay() {
 
     const elapsedTime = Date.now() - startTime;
     
-    // Formatear a S.cs (Segundos.Centésimas)
     const seconds = Math.floor(elapsedTime / 1000);
     const centiseconds = Math.floor((elapsedTime % 1000) / 10);
 
@@ -112,24 +127,19 @@ function clearLog() {
     logTableBody.innerHTML = '';
 }
 
-// Crea una fila en el historial con la configuración del set
 function createLogEntry(setNumber, minDelay, maxDelay, parTime) {
     const row = logTableBody.insertRow();
     row.id = `set-${setNumber}`;
     
-    // 1. Set Number
     let cell1 = row.insertCell();
     cell1.textContent = setNumber;
 
-    // 2. Start Delay Range
     let cell2 = row.insertCell();
     cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`;
 
-    // 3. Par Time
     let cell3 = row.insertCell();
     cell3.textContent = parTime.toFixed(2) + ' s'; 
     
-    // 4. Tiempo Límite (El tiempo límite es el Par Time)
     let cell4 = row.insertCell();
     cell4.textContent = parTime.toFixed(2) + ' s';
     
@@ -152,8 +162,7 @@ function runRepetition() {
 
     const currentMode = modeSelector.value;
     
-    // Si no es Modo Libre y ya se terminaron las repeticiones, detener.
-    if (currentMode !== 'free' && currentRepetition > totalRepetitions) {
+    if (currentMode !== 'free' && currentRepetition >= totalRepetitions) {
         stopTimer(true);
         return;
     }
@@ -163,7 +172,6 @@ function runRepetition() {
     let maxDelay = parseFloat(maxDelayInput.value);
     let parTime = parseFloat(parTimeInput.value);
     
-    // Lógica para Modo Aleatorio PRO: Retardos variables en cada set
     if (currentMode === 'pro') {
         const rangeMin = 1.0;
         const rangeMax = 6.0;
@@ -174,7 +182,6 @@ function runRepetition() {
         minDelay = parseFloat(newMin.toFixed(1));
         maxDelay = parseFloat(newMax.toFixed(1));
         
-        // Actualizar la interfaz para el usuario
         minDelayInput.value = minDelay;
         maxDelayInput.value = maxDelay;
     }
@@ -187,10 +194,8 @@ function runRepetition() {
         return;
     }
 
-    // Aumentar la repetición aquí, antes de correr el set
     currentRepetition++;
 
-    // Registro automático antes de iniciar el set (solo Manual/Pro)
     if (currentMode === 'manual' || currentMode === 'pro') {
         createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
         currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
@@ -198,6 +203,9 @@ function runRepetition() {
          currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
     }
 
+    // *** NUEVA LÓGICA: READY? ***
+    readyVoice();
+    
     const randomDelay = getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
@@ -209,20 +217,19 @@ function runRepetition() {
         
         startBeep();
         
-        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Par -> parTimeBeep y programar siguiente set
+        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Límite -> parTimeBeep y programar descanso
         if (currentMode === 'manual' || currentMode === 'pro') {
             mainTimerId = setTimeout(() => {
                 if (!isRunning) return;
 
                 parTimeBeep();
                 
-                // *** Flujo continuo: programar el descanso inmediatamente ***
+                // Programar el descanso y el siguiente set
                 if (currentRepetition < totalRepetitions) {
                     const rest = parseFloat(restTimeInput.value) * 1000;
                     statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
                     mainTimerId = setTimeout(runRepetition, rest);
                 } else {
-                    // Todas las repeticiones completadas
                     stopTimer(true);
                 }
 
@@ -255,7 +262,7 @@ function startTimer() {
         totalRepetitions = '∞'; 
     }
 
-    currentRepetition = 0; // Comenzamos en 0 para que la primera llamada a runRepetition lo suba a 1
+    currentRepetition = 0; 
     isRunning = true;
     
     toggleControls(true);
@@ -269,13 +276,17 @@ function stopTimer(completed = false) {
     stopTimerDisplay();
     isRunning = false;
     
+    // Detener la síntesis de voz si está activa
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    
     toggleControls(false);
     
     if (completed) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
     } else {
-        // currentRepetition se incrementa antes de correr, así que restamos 1 para el set actual
         const setsDone = currentRepetition > 0 ? currentRepetition - 1 : 0;
         statusDisplay.textContent = `DETENIDO. ${setsDone} SETS REALIZADOS`;
         counterDisplay.textContent = 'PAUSA';
@@ -299,7 +310,6 @@ function updateInterfaceByMode() {
     const showLog = mode === 'manual' || mode === 'pro';
     logPanel.classList.toggle('hidden', !showLog);
     
-    // Deshabilitar Retardos en modo 'pro' para indicar que cambian solos
     const disableDelayInputs = mode === 'pro';
     minDelayInput.disabled = disableDelayInputs;
     maxDelayInput.disabled = disableDelayInputs;
