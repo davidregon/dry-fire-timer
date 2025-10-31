@@ -112,9 +112,16 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz PREPARADO? - DRY FIRE (MODIFICADA para devolver una Promesa)
+// 3. Voz PREPARADO? - DRY FIRE (SOLUCIÓN DEFINITIVA con Timeout de Respaldo)
 function readyVoice() {
-    return new Promise(resolve => {
+    // Promesa que resuelve después de 2 segundos (tiempo suficiente para "PREPARADO?")
+    const timeoutPromise = new Promise(resolve => setTimeout(() => {
+        console.warn("Voz forzada a resolverse por timeout.");
+        resolve();
+    }, 2000)); 
+
+    // Promesa que resuelve cuando el speech termina
+    const speechPromise = new Promise(resolve => {
         if (speechAvailable) {
             window.speechSynthesis.cancel(); 
             
@@ -123,13 +130,11 @@ function readyVoice() {
             utterance.rate = 1.0; 
             
             utterance.onend = () => {
-                // Resuelve la promesa cuando la voz termina.
                 resolve(); 
             };
             
             utterance.onerror = (e) => {
                 console.error("SpeechSynthesis error:", e);
-                // Si hay un error, resuelve de inmediato para no detener el temporizador.
                 resolve(); 
             };
 
@@ -143,10 +148,12 @@ function readyVoice() {
             window.speechSynthesis.speak(utterance);
         } else {
             statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
-            // Si la voz no está disponible, resolvemos inmediatamente.
             resolve();
         }
     });
+    
+    // Promise.race() resuelve cuando la primera promesa se completa (voz o timeout).
+    return Promise.race([speechPromise, timeoutPromise]);
 }
 
 // ----------------------------------------------------
@@ -197,7 +204,7 @@ function getRandomDelay(min, max) {
     return delay;
 }
 
-// runRepetition AHORA ES ASÍNCRONA
+// runRepetition AHORA ES ASÍNCRONA y robusta
 async function runRepetition() {
     if (!isRunningDryFire) return;
 
@@ -251,6 +258,7 @@ async function runRepetition() {
     statusDisplay.textContent = `ESPERANDO SEÑAL...`;
     
     // 1. Decir "PREPARADO?" y esperar a que la voz termine (await)
+    // Se garantiza que no se quede colgado gracias a Promise.race en readyVoice().
     await readyVoice(); 
 
     // 2. Esperamos el Retardo Aleatorio (delayToUse)
@@ -327,7 +335,7 @@ function stopDryFire(completed = false) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
     } else {
-        const setsDone = currentRepetition > 0 ? currentRepetition : 0; // Usamos currentRepetition sin restar 1
+        const setsDone = currentRepetition > 0 ? currentRepetition : 0; 
         statusDisplay.textContent = `DETENIDO. ${setsDone} SETS REALIZADOS`;
         counterDisplay.textContent = 'PAUSA';
     }
@@ -642,7 +650,7 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// Event Listener de INICIO DRY FIRE (Mantiene solo la activación de audio)
+// Event Listener de INICIO DRY FIRE 
 startButton.addEventListener('click', async () => {
     // 1. Garantizamos que AudioContext esté listo
     await initAudioContext(); 
