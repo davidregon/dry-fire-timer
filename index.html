@@ -8,39 +8,50 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎯 Dry Fire Pro Timer</h1>
-        <div class="controls">
+        <h1>DRY FIRE PRO TIMER</h1>
+
+        <div class="display-area">
+            <div id="counter">00.00</div>
+            <div id="status">CONFIGURA Y PULSA INICIAR</div>
+        </div>
+
+        <div class="controls-panel">
+            <h2>CONFIGURACIÓN DE ENTRENAMIENTO</h2>
+            
             <div class="input-group">
-                <label for="minDelay">Retardo Mínimo (s):</label>
+                <label for="minDelay">RETARDO MIN. (s)</label>
                 <input type="number" id="minDelay" value="1.0" min="0.5" step="0.1">
             </div>
             <div class="input-group">
-                <label for="maxDelay">Retardo Máximo (s):</label>
+                <label for="maxDelay">RETARDO MÁX. (s)</label>
                 <input type="number" id="maxDelay" value="4.0" min="1.0" step="0.1">
             </div>
             
+            <hr>
+            
             <div class="input-group">
-                <label for="parTime">Tiempo Par (s):</label>
-                <input type="number" id="parTime" value="1.5" min="0.5" step="0.1">
+                <label for="parTime">TIEMPO PAR (s)</label>
+                <input type="number" id="parTime" value="1.50" min="0.10" step="0.05">
             </div>
 
+            <hr>
+
             <div class="input-group">
-                <label for="repetitions">Repeticiones (Sets):</label>
+                <label for="repetitions">REPETICIONES</label>
                 <input type="number" id="repetitions" value="10" min="1">
             </div>
             <div class="input-group">
-                <label for="restTime">Descanso entre Sets (s):</label>
-                <input type="number" id="restTime" value="3.0" min="1.0" step="0.1">
+                <label for="restTime">DESCANSO (s)</label>
+                <input type="number" id="restTime" value="3.0" min="1.0" step="0.5">
             </div>
-
-            <button id="startButton">INICIAR ENTRENAMIENTO</button>
-            <button id="stopButton" disabled>DETENER</button>
         </div>
         
-        <div class="display-area">
-            <p id="status">✅ Configura tus parámetros y comienza.</p>
-            <p id="counter">LISTO</p>
+        <div class="button-group">
+            <button id="startButton">INICIAR</button>
+            <button id="stopButton" disabled>DETENER</button>
         </div>
+
+        <p class="current-set" id="currentSet">Set: 0/0</p>
     </div>
     <script src="script.js"></script>
 </body>
