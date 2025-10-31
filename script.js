@@ -17,11 +17,10 @@ const repetitionsGroup = document.getElementById('repetitionsGroup');
 const restTimeGroup = document.getElementById('restTimeGroup');
 const repRestSeparator = document.getElementById('repRestSeparator');
 
-// NUEVAS REFERENCIAS PARA OCULTAR/MOSTRAR
+// REFERENCIAS PARA GESTIÓN DE INTERFAZ
 const minDelayGroup = document.getElementById('minDelayGroup');
 const maxDelayGroup = document.getElementById('maxDelayGroup');
 const minDelayLabel = document.getElementById('minDelayLabel');
-
 
 // Variables de estado del Timer
 let audioContext = null; 
@@ -32,7 +31,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
 let isCountingTime = false;
-let speechAvailable = 'speechSynthesis' in window; // Comprobación de disponibilidad de voz
+let speechAvailable = 'speechSynthesis' in window; 
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
@@ -153,7 +152,8 @@ function createLogEntry(setNumber, minDelay, maxDelay, parTime) {
     cell1.textContent = setNumber;
 
     let cell2 = row.insertCell();
-    cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`;
+    // Usamos el valor real de minDelay y maxDelay registrado
+    cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`; 
 
     let cell3 = row.insertCell();
     cell3.textContent = parTime.toFixed(2) + ' s'; 
@@ -189,13 +189,18 @@ function runRepetition() {
         return;
     }
 
-    // 1. OBTENER PARÁMETROS DE RETARDO
+    // 1. OBTENER Y AJUSTAR PARÁMETROS DE RETARDO
     let minDelay = parseFloat(minDelayInput.value);
     let maxDelay = parseFloat(maxDelayInput.value);
     let parTime = parseFloat(parTimeInput.value);
     
+    if (currentMode === 'manual') {
+         // ** CORRECCIÓN: Aseguramos que el valor Máximo sea igual al Mínimo **
+         maxDelay = minDelay;
+         maxDelayInput.value = minDelay; // Sincroniza el input oculto
+    }
+    
     if (currentMode === 'pro') {
-        // En modo Pro, los valores se obtienen de los inputs antes de ser aleatorizados
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
@@ -208,14 +213,11 @@ function runRepetition() {
         // Actualizar inputs visibles con los nuevos valores aleatorios
         minDelayInput.value = minDelay;
         maxDelayInput.value = maxDelay;
-    } else if (currentMode === 'manual') {
-         // En modo manual, el máximo se sincroniza con el mínimo (retardo fijo)
-         maxDelay = minDelay;
     }
 
     const parTimeMs = parTime * 1000;
     
-    // Validar solo si Min es ESTRICTAMENTE MAYOR que Max (solo aplicable al modo Pro si no se usan los valores aleatorios)
+    // Validar solo si Min es ESTRICTAMENTE MAYOR que Max
     if (minDelay > maxDelay) { 
         statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor o igual que el Máx.";
         stopTimer(false);
@@ -225,6 +227,7 @@ function runRepetition() {
     currentRepetition++;
 
     // El registro es SIEMPRE necesario
+    // Usamos los valores ajustados para el log
     createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
@@ -273,14 +276,13 @@ function runRepetition() {
 function startTimer() {
     if (isRunning) return;
     
-    // totalRepetitions ahora siempre se lee del input
     totalRepetitions = parseInt(repetitionsInput.value);
     if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
         alert("El número de Repeticiones debe ser 1 o más.");
         return;
     }
     
-    // ** En modo Manual, aseguramos que el valor Máximo sea igual al Mínimo antes de empezar **
+    // ** CORRECCIÓN: Nos aseguramos de sincronizar antes de iniciar **
     if (modeSelector.value === 'manual') {
         maxDelayInput.value = minDelayInput.value;
     }
@@ -329,19 +331,20 @@ function updateInterfaceByMode() {
     logPanel.classList.remove('hidden');
     
     if (mode === 'pro') {
-        // MODO PRO: Retardo Min. y Retardo Max.
+        // MODO PRO: Retardo Min. y Retardo Max. (Ambos deshabilitados al ser automáticos)
         minDelayLabel.textContent = 'RETARDO MIN. (s)';
-        minDelayInput.disabled = true; // Deshabilitado por la lógica PRO
+        maxDelayGroup.style.display = 'flex'; // Mostrar Retardo Máximo
         
-        maxDelayGroup.classList.remove('hidden');
-        maxDelayInput.disabled = true; // Deshabilitado por la lógica PRO
+        // Bloqueo de edición del modo PRO (Corrección 3)
+        minDelayInput.disabled = true; 
+        maxDelayInput.disabled = true; 
         
     } else if (mode === 'manual') {
-        // MODO MANUAL: Solo un campo llamado RETARDO
+        // MODO MANUAL: Solo un campo llamado RETARDO (Habilitado para edición)
         minDelayLabel.textContent = 'RETARDO (s)'; 
-        minDelayInput.disabled = false; // Habilitado para establecer el retardo fijo
-
-        maxDelayGroup.classList.add('hidden'); // Ocultar el campo de Retardo Máximo
+        maxDelayGroup.style.display = 'none'; // Ocultar Retardo Máximo
+        
+        minDelayInput.disabled = false; // Habilitar edición en Manual
     }
     
     startButton.textContent = 'INICIAR';
@@ -370,13 +373,12 @@ function toggleControls(disable) {
     const mode = modeSelector.value;
     
     if (mode === 'pro') {
-        // En PRO: Ambos inputs deshabilitados si está corriendo
-        minDelayInput.disabled = disable;
-        maxDelayInput.disabled = disable;
+        // En PRO, los inputs de retardo SIEMPRE están deshabilitados
+        minDelayInput.disabled = true;
+        maxDelayInput.disabled = true;
     } else if (mode === 'manual') {
         // En Manual: El único input (minDelay) se deshabilita si está corriendo
         minDelayInput.disabled = disable;
-        // maxDelayInput sigue oculto
     }
 }
 
@@ -390,8 +392,14 @@ stopButton.addEventListener('click', () => stopTimer(false));
 modeSelector.addEventListener('change', updateInterfaceByMode);
 document.addEventListener('DOMContentLoaded', updateInterfaceByMode);
 
-// Eliminamos los event listeners de sincronización, ya que el campo máximo está oculto 
-// y el valor se sincroniza en startTimer y runRepetition.
+// Event Listener para sincronizar maxDelayInput con minDelayInput en modo Manual (aunque esté oculto)
 document.addEventListener('DOMContentLoaded', () => {
     updateInterfaceByMode();
+
+    minDelayInput.addEventListener('change', () => {
+        if (modeSelector.value === 'manual') {
+            // Sincronizar el valor del input Máximo (oculto)
+            maxDelayInput.value = minDelayInput.value;
+        }
+    });
 });
