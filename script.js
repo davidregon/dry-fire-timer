@@ -20,7 +20,7 @@ const maxDelayGroup = document.getElementById('maxDelayGroup');
 const container = document.querySelector('.container');
 const displayArea = document.querySelector('.display-area');
 const logPanel = document.getElementById('logPanel');
-const headerMotto = document.getElementById('header-motto'); // Referencia para el borde y color
+const headerMotto = document.getElementById('header-motto'); 
 
 // --- MMA TIMER REFERENCES (NEW) ---
 const mmaModeSelector = document.getElementById('mmaModeSelector');
@@ -51,7 +51,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
 let speechAvailable = 'speechSynthesis' in window; 
-let speechInitialized = false; // Para rastrear si SpeechSynthesis ha sido activado
+let speechInitialized = false; 
 
 // --- MMA TIMER STATE ---
 let currentRound = 0;
@@ -112,7 +112,7 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz PREPARADO? - DRY FIRE (CORREGIDO)
+// 3. Voz PREPARADO? - DRY FIRE
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
@@ -121,8 +121,6 @@ function readyVoice() {
         utterance.lang = 'es-ES'; 
         utterance.rate = 1.0; 
         
-        // Obtener la voz es asíncrono y puede que el array de voces esté vacío al principio
-        // Por eso la inicialización la hacemos en el click para "despertar" la API.
         const voices = window.speechSynthesis.getVoices();
         const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
 
@@ -269,7 +267,7 @@ function runRepetition() {
 }
 
 
-// FUNCIÓN DE INICIO DRY FIRE
+// FUNCIÓN DE INICIO DRY FIRE (MODIFICADA)
 function startDryFire() {
     if (isRunningDryFire) return;
     
@@ -288,7 +286,30 @@ function startDryFire() {
     
     toggleDryFireControls(true);
     clearDryFireLog();
-    runRepetition();
+    
+    // --- LÓGICA DE ACTIVACIÓN DE VOZ FORZADA ---
+    if (speechAvailable && !speechInitialized) {
+        statusDisplay.textContent = 'ACTIVANDO VOZ...';
+        
+        // Activamos la voz. Esta es la primera (y más importante) llamada.
+        readyVoice(); 
+        speechInitialized = true;
+        
+        // Damos un tiempo de respiro para que la API se despierte y termine de decir "PREPARADO?".
+        const activationDelay = 1500; // 1.5 segundos.
+        
+        mainTimerId = setTimeout(() => {
+            if (isRunningDryFire) {
+                // Ahora que la voz ya ha tenido tiempo de iniciarse, 
+                // re-iniciamos el flujo con la primera repetición real.
+                runRepetition(); 
+            }
+        }, activationDelay);
+        
+    } else {
+        // Si ya estaba inicializado o la voz no está disponible, iniciamos directamente.
+        runRepetition();
+    }
 }
 
 // Detiene el temporizador DRY FIRE
@@ -314,6 +335,10 @@ function stopDryFire(completed = false) {
     currentSetDisplay.textContent = 'Set: 0/0';
 }
 
+function clearDryFireLog() {
+    logTableBody.innerHTML = '';
+}
+
 function createDryFireLogEntry(setNumber, minDelay, maxDelay, parTime) {
     const row = logTableBody.insertRow();
     row.id = `set-${setNumber}`;
@@ -332,12 +357,6 @@ function createDryFireLogEntry(setNumber, minDelay, maxDelay, parTime) {
     
     logTableBody.appendChild(row);
     return row;
-}
-
-// ... (El resto de funciones del Dry Fire como toggleDryFireControls, updateDryFireInterfaceByMode, etc., permanecen sin cambios)
-
-function clearDryFireLog() {
-    logTableBody.innerHTML = '';
 }
 
 function toggleDryFireControls(disable) {
@@ -380,7 +399,7 @@ function updateDryFireInterfaceByMode() {
 
 
 // ----------------------------------------------------
-// --- MMA TIMER LOGIC ---
+// --- MMA TIMER LOGIC (Sin cambios, por brevedad) ---
 // ----------------------------------------------------
 
 function updateMMAInterfaceByMode() {
@@ -479,7 +498,6 @@ function runMMASequence() {
         return;
     }
 
-    // 1. INICIAR ASALTO (ROUND)
     currentRound++;
     isRoundTime = true;
     currentRoundDuration = getRoundDuration();
@@ -496,7 +514,6 @@ function runMMASequence() {
 function startRest() {
     if (!isRunningMMA) return;
 
-    // 2. INICIAR DESCANSO (REST)
     isRoundTime = false;
     
     if (currentRound < totalRounds) {
@@ -566,7 +583,7 @@ function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
 
 
 // ----------------------------------------------------
-// --- GLOBAL EVENT LISTENERS & UI SWITCHING ---
+// --- GLOBAL EVENT LISTENERS & UI SWITCHING (Sin cambios) ---
 // ----------------------------------------------------
 
 function setDryFireStyle() {
@@ -626,21 +643,12 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// CORRECCIÓN DEFINITIVA DE INICIO DRY FIRE: Garantiza la activación de SpeechSynthesis.
+// Event Listener de INICIO DRY FIRE (MODIFICADO)
 startButton.addEventListener('click', async () => {
     // 1. Garantizamos que AudioContext esté listo para los pitidos
     await initAudioContext(); 
     
-    // 2. Garantizamos que SpeechSynthesis esté activo (si es la primera vez)
-    if (speechAvailable && !speechInitialized) {
-        // Llamamos a readyVoice() directamente en el clic para despertar la API
-        readyVoice(); 
-        speechInitialized = true; 
-        // Esperamos un breve momento para que la API se despierte antes de iniciar el flujo principal.
-        await new Promise(resolve => setTimeout(resolve, 50)); 
-    }
-    
-    // 3. Iniciamos el flujo del temporizador. runRepetition() llamará a readyVoice() de nuevo, que es lo esperado.
+    // 2. Iniciamos el flujo. startDryFire() manejará la activación forzada de la voz.
     startDryFire(); 
 });
 
