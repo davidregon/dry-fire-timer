@@ -152,7 +152,6 @@ function createLogEntry(setNumber, minDelay, maxDelay, parTime) {
     cell1.textContent = setNumber;
 
     let cell2 = row.insertCell();
-    // Usamos el valor real de minDelay y maxDelay registrado
     cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`; 
 
     let cell3 = row.insertCell();
@@ -173,6 +172,7 @@ function getRandomDelay(min, max) {
     const maxMs = parseFloat(max) * 1000;
     const delay = Math.random() * (maxMs - minMs) + minMs;
     
+    // Si min == max (modo manual), el valor aleatorio es el mismo (retardo fijo)
     if (minMs === maxMs) {
         return minMs;
     }
@@ -195,12 +195,13 @@ function runRepetition() {
     let parTime = parseFloat(parTimeInput.value);
     
     if (currentMode === 'manual') {
-         // ** CORRECCIÓN: Aseguramos que el valor Máximo sea igual al Mínimo **
+         // Aseguramos que el valor Máximo sea igual al Mínimo
          maxDelay = minDelay;
-         maxDelayInput.value = minDelay; // Sincroniza el input oculto
+         maxDelayInput.value = minDelay; 
     }
     
     if (currentMode === 'pro') {
+        // En modo Pro, se generan nuevos retardos aleatorios en cada repetición
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
@@ -227,7 +228,6 @@ function runRepetition() {
     currentRepetition++;
 
     // El registro es SIEMPRE necesario
-    // Usamos los valores ajustados para el log
     createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
@@ -282,7 +282,7 @@ function startTimer() {
         return;
     }
     
-    // ** CORRECCIÓN: Nos aseguramos de sincronizar antes de iniciar **
+    // CORRECCIÓN CLAVE: Aseguramos la sincronización antes de iniciar para evitar el error de min > max
     if (modeSelector.value === 'manual') {
         maxDelayInput.value = minDelayInput.value;
     }
@@ -331,16 +331,16 @@ function updateInterfaceByMode() {
     logPanel.classList.remove('hidden');
     
     if (mode === 'pro') {
-        // MODO PRO: Retardo Min. y Retardo Max. (Ambos deshabilitados al ser automáticos)
+        // MODO PRO: Retardo Min. y Retardo Max.
         minDelayLabel.textContent = 'RETARDO MIN. (s)';
         maxDelayGroup.style.display = 'flex'; // Mostrar Retardo Máximo
         
-        // Bloqueo de edición del modo PRO (Corrección 3)
+        // Bloqueo de edición del modo PRO
         minDelayInput.disabled = true; 
         maxDelayInput.disabled = true; 
         
     } else if (mode === 'manual') {
-        // MODO MANUAL: Solo un campo llamado RETARDO (Habilitado para edición)
+        // MODO MANUAL: Solo un campo llamado RETARDO
         minDelayLabel.textContent = 'RETARDO (s)'; 
         maxDelayGroup.style.display = 'none'; // Ocultar Retardo Máximo
         
@@ -379,6 +379,7 @@ function toggleControls(disable) {
     } else if (mode === 'manual') {
         // En Manual: El único input (minDelay) se deshabilita si está corriendo
         minDelayInput.disabled = disable;
+        // maxDelayInput sigue oculto
     }
 }
 
