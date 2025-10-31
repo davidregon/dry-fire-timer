@@ -48,7 +48,58 @@ body::before {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 
+/* --- ESTILOS DE NAVEGACIÓN DE PESTAÑAS --- */
+#mode-tabs {
+    position: fixed;
+    top: 45px; /* Justo debajo de #header-motto */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 480px;
+    display: flex;
+    justify-content: space-around;
+    z-index: 5;
+    background-color: #2c2c2c;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid #444;
+}
+
+#mode-tabs button {
+    flex-grow: 1;
+    padding: 8px 0;
+    border: none;
+    background: none;
+    color: #aaa;
+    font-size: 0.9em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+/* Estilo para la pestaña DRY FIRE activa (VERDE) */
+#dryFireTab.active {
+    background-color: #00e676; /* Verde de DRY FIRE */
+    color: #1a1a1a;
+    box-shadow: 0 0 5px rgba(0, 230, 118, 0.5);
+}
+
+/* Estilo para la pestaña MMA activa (ROJO) */
+#mmaTab.active {
+    background-color: #ff3d00; /* Rojo de MMA */
+    color: #1a1a1a;
+    box-shadow: 0 0 5px rgba(255, 61, 0, 0.5);
+}
+
+#mode-tabs button:hover:not(.active) {
+    background-color: #3a3a3a;
+    color: #fff;
+}
+
 .container {
+    /* Ajustado para el encabezado fijo (40px) + tabs (40px) + padding (10px) */
+    margin-top: 100px; 
+    margin-bottom: 25px;
     background-color: #2c2c2c;
     padding: 25px;
     border-radius: 12px;
@@ -56,12 +107,10 @@ body::before {
     text-align: center;
     width: 95%;
     max-width: 480px;
-    border: 1px solid #00e676; /* Borde de color de marca */
+    /* El borde del container será verde por defecto, pero se cambiará con JS si es necesario */
+    border: 1px solid #00e676; 
     z-index: 1;
     position: relative;
-    /* Margen ajustado para la frase fija y el padding del body */
-    margin-top: 50px; 
-    margin-bottom: 25px;
 }
 
 h1 {
@@ -84,26 +133,48 @@ h2 {
 
 .display-area {
     background-color: #111;
+    /* El borde del display usa el color por defecto (verde) */
     border: 3px solid #00e676; 
     border-radius: 8px;
     padding: 15px;
     margin-bottom: 25px;
 }
 
+/* --- DRY FIRE Display --- */
 #counter {
     font-size: 4em;
-    color: #00e676;
+    color: #00e676; /* Verde */
     margin: 0;
     line-height: 1.2;
     font-weight: bold;
 }
-
 #status {
     font-size: 1em;
     color: #aaa;
     margin-top: 5px;
     min-height: 1.2em;
 }
+
+/* --- MMA TIMER Display --- */
+#mmaCounter {
+    font-size: 4em;
+    color: #ff3d00; /* Rojo de MMA */
+    margin: 0;
+    line-height: 1.2;
+    font-weight: bold;
+}
+#mmaStatus {
+    font-size: 1em;
+    color: #aaa;
+    margin-top: 5px;
+    min-height: 1.2em;
+}
+#mmaCurrentRound {
+    color: #ff3d00; /* Rojo para destacar el estado del asalto */
+    margin-top: 10px;
+}
+/* ... (el resto de input-group, hr, button-group, etc., permanece igual) ... */
+
 
 .controls-panel {
     text-align: left;
@@ -116,30 +187,7 @@ h2 {
     margin-bottom: 15px;
 }
 
-.input-group label {
-    font-size: 0.9em;
-    color: #ccc;
-    flex-grow: 1;
-}
-
-.input-group input,
-.input-group select {
-    width: 120px;
-    padding: 8px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    background-color: #333;
-    color: #f0f0f0;
-    font-family: 'Roboto Mono', monospace;
-    text-align: right;
-    font-weight: bold;
-}
-
-.input-group input:disabled,
-.input-group select:disabled {
-    background-color: #444;
-    color: #888;
-}
+/* ... (resto de input/select styles) ... */
 
 hr {
     border: 0;
@@ -165,22 +213,36 @@ button {
     text-transform: uppercase;
 }
 
+/* Botones DRY FIRE */
 #startButton {
-    background-color: #00e676; /* Color de marca */
+    background-color: #00e676; /* Verde */
     color: #1a1a1a;
 }
-
 #startButton:hover:not([disabled]) {
     background-color: #00c853;
 }
-
 #stopButton {
-    background-color: #ff3d00;
+    background-color: #ff3d00; /* Rojo */
     color: #1a1a1a;
 }
-
 #stopButton:hover:not([disabled]) {
     background-color: #dd2c00;
+}
+
+/* Botones MMA */
+#mmaStartButton {
+    background-color: #ff3d00; /* Rojo */
+    color: #1a1a1a;
+}
+#mmaStartButton:hover:not([disabled]) {
+    background-color: #dd2c00;
+}
+#mmaStopButton {
+    background-color: #00e676; /* Verde (para mantener el contraste) */
+    color: #1a1a1a;
+}
+#mmaStopButton:hover:not([disabled]) {
+    background-color: #00c853;
 }
 
 button:disabled {
@@ -204,12 +266,38 @@ button:disabled {
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
-.log-panel h2 {
-    color: #00e676; /* Color de marca */
+/* Encabezados de Log DRY FIRE */
+#logPanel h2 {
+    color: #00e676; /* Verde */
     border-bottom: 1px solid #444;
     margin-bottom: 15px;
     padding-bottom: 5px;
 }
+#logTable thead th {
+    background-color: #1a1a1a;
+    color: #00e676; /* Verde */
+    padding: 8px 5px;
+    text-align: left;
+    border-bottom: 2px solid #00e676;
+    text-transform: uppercase;
+}
+
+/* Encabezados de Log MMA */
+#mmaLogPanel h2 {
+    color: #ff3d00; /* Rojo */
+    border-bottom: 1px solid #444;
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+}
+#mmaLogTable thead th {
+    background-color: #1a1a1a;
+    color: #ff3d00; /* Rojo */
+    padding: 8px 5px;
+    text-align: left;
+    border-bottom: 2px solid #ff3d00;
+    text-transform: uppercase;
+}
+
 
 #logTable {
     width: 100%;
@@ -217,20 +305,19 @@ button:disabled {
     font-size: 0.8em;
 }
 
-#logTable thead th {
-    background-color: #1a1a1a;
-    color: #00e676;
-    padding: 8px 5px;
-    text-align: left;
-    border-bottom: 2px solid #00e676;
-    text-transform: uppercase;
+#mmaLogTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8em;
 }
 
-#logTable tbody tr:nth-child(even) {
+#logTable tbody tr:nth-child(even),
+#mmaLogTable tbody tr:nth-child(even) {
     background-color: #3a3a3a;
 }
 
-#logTable tbody td {
+#logTable tbody td,
+#mmaLogTable tbody td {
     padding: 8px 5px;
     color: #ccc;
     border-bottom: 1px solid #444;
