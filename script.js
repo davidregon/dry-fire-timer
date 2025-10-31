@@ -26,7 +26,7 @@ let currentRepetition = 0;
 let totalRepetitions = 0;
 let isRunning = false;
 let isCountingTime = false;
-let speechAvailable = 'speechSynthesis' in window; // Comprobación de disponibilidad de voz
+let speechAvailable = 'speechSynthesis' in window; 
 
 // --- FUNCIONES DE AUDIO GARANTIZADAS ---
 
@@ -76,16 +76,15 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz LISTO? (ACTUALIZADO: ESPAÑOL y TEXTO)
+// 3. Voz LISTO?
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
         
-        const utterance = new SpeechSynthesisUtterance("LISTO?"); // Texto en español
-        utterance.lang = 'es-ES'; // Solicitud de voz en español de España
+        const utterance = new SpeechSynthesisUtterance("LISTO?"); 
+        utterance.lang = 'es-ES'; 
         utterance.rate = 1.0; 
         
-        // Intentamos seleccionar una voz masculina si es posible
         const voices = window.speechSynthesis.getVoices();
         const maleVoice = voices.find(voice => 
             (voice.lang === 'es-ES' || voice.lang.startsWith('es')) && 
@@ -94,10 +93,7 @@ function readyVoice() {
 
         if (maleVoice) {
             utterance.voice = maleVoice;
-        } else {
-            // Si no se encuentra una voz masculina específica, usamos la voz por defecto es-ES.
-            // Si la voz por defecto de es-ES es masculina en tu navegador, funcionará.
-        }
+        } 
         
         window.speechSynthesis.speak(utterance);
     } else {
@@ -178,7 +174,8 @@ function runRepetition() {
 
     const currentMode = modeSelector.value;
     
-    if (currentMode !== 'free' && currentRepetition >= totalRepetitions) {
+    // Ahora SIEMPRE comprobamos contra totalRepetitions (ya no hay modo libre)
+    if (currentRepetition >= totalRepetitions) {
         stopTimer(true);
         return;
     }
@@ -212,20 +209,17 @@ function runRepetition() {
 
     currentRepetition++;
 
-    if (currentMode === 'manual' || currentMode === 'pro') {
-        createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
-        currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
-    } else {
-         currentSetDisplay.textContent = `Libre Set: ${currentRepetition}`;
-    }
+    // El registro es SIEMPRE necesario
+    createLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
+    currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-    // Llama a la voz "LISTO?" en español
+    // Llama a la voz "LISTO?"
     readyVoice();
     
     const randomDelay = getRandomDelay(minDelay, maxDelay);
     
     counterDisplay.textContent = '00.00';
-    // Si la voz no es compatible, este mensaje permanece. Si lo es, la voz actúa como el READY.
+
     if (!speechAvailable) {
         statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
     } else {
@@ -238,30 +232,22 @@ function runRepetition() {
         
         startBeep();
         
-        // Paso 2: (Solo si NO es Modo Libre) Espera el Tiempo Límite -> parTimeBeep y programar descanso
-        if (currentMode === 'manual' || currentMode === 'pro') {
-            mainTimerId = setTimeout(() => {
-                if (!isRunning) return;
+        // Paso 2: Espera el Tiempo Límite -> parTimeBeep y programar descanso
+        mainTimerId = setTimeout(() => {
+            if (!isRunning) return;
 
-                parTimeBeep();
-                
-                // Programar el descanso y el siguiente set
-                if (currentRepetition < totalRepetitions) {
-                    const rest = parseFloat(restTimeInput.value) * 1000;
-                    statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                    mainTimerId = setTimeout(runRepetition, rest); 
-                } else {
-                    stopTimer(true);
-                }
-
-            }, parTimeMs);
-        } else {
-            // Lógica para Modo Libre: Solo hay beep de inicio, luego pasa al descanso
-            const rest = parseFloat(restTimeInput.value) * 1000;
-            statusDisplay.textContent = `DESCANSO. PRÓXIMO INICIO EN ${rest / 1000}s...`;
+            parTimeBeep();
             
-            mainTimerId = setTimeout(runRepetition, rest);
-        }
+            // Programar el descanso y el siguiente set
+            if (currentRepetition < totalRepetitions) {
+                const rest = parseFloat(restTimeInput.value) * 1000;
+                statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
+                mainTimerId = setTimeout(runRepetition, rest); 
+            } else {
+                stopTimer(true);
+            }
+
+        }, parTimeMs);
         
     }, randomDelay);
 }
@@ -271,16 +257,11 @@ function runRepetition() {
 function startTimer() {
     if (isRunning) return;
     
-    const currentMode = modeSelector.value;
-    
-    if (currentMode !== 'free') {
-        totalRepetitions = parseInt(repetitionsInput.value);
-        if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
-            alert("El número de Repeticiones debe ser 1 o más.");
-            return;
-        }
-    } else {
-        totalRepetitions = '∞'; 
+    // totalRepetitions ahora siempre se lee del input
+    totalRepetitions = parseInt(repetitionsInput.value);
+    if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
+        alert("El número de Repeticiones debe ser 1 o más.");
+        return;
     }
 
     currentRepetition = 0; 
@@ -297,7 +278,6 @@ function stopTimer(completed = false) {
     stopTimerDisplay();
     isRunning = false;
     
-    // Detener la síntesis de voz si está activa
     if (speechAvailable) {
         window.speechSynthesis.cancel();
     }
@@ -320,27 +300,26 @@ function stopTimer(completed = false) {
 function updateInterfaceByMode() {
     const mode = modeSelector.value;
     
-    const showParTime = mode !== 'free';
-    parTimeGroup.classList.toggle('hidden', !showParTime);
-
-    const showRepRest = mode !== 'free';
-    repetitionsGroup.classList.toggle('hidden', !showRepRest);
-    restTimeGroup.classList.toggle('hidden', !showRepRest);
-    repRestSeparator.classList.toggle('hidden', !showRepRest);
-
-    const showLog = mode === 'manual' || mode === 'pro';
-    logPanel.classList.toggle('hidden', !showLog);
+    // Todos los grupos (ParTime, Repeticiones, Descanso, Log) ahora SIEMPRE están visibles.
+    parTimeGroup.classList.remove('hidden');
+    repetitionsGroup.classList.remove('hidden');
+    restTimeGroup.classList.remove('hidden');
+    repRestSeparator.classList.remove('hidden');
+    logPanel.classList.remove('hidden');
     
+    // Solo se gestiona el bloqueo de los inputs de retardo en modo 'pro'
     const disableDelayInputs = mode === 'pro';
     minDelayInput.disabled = disableDelayInputs;
     maxDelayInput.disabled = disableDelayInputs;
     
-    if (mode !== 'pro') {
+    if (mode === 'manual') {
         minDelayInput.disabled = false;
         maxDelayInput.disabled = false;
+        // En modo manual, el rango es fijo (min=max para retardo fijo)
+        minDelayInput.value = maxDelayInput.value; 
     }
     
-    startButton.textContent = (mode === 'free') ? 'INICIAR (LIBRE)' : 'INICIAR';
+    startButton.textContent = 'INICIAR';
     
     statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
     counterDisplay.textContent = '00.00';
@@ -350,9 +329,8 @@ function updateInterfaceByMode() {
 
 // --- GESTIÓN DE INTERFAZ Y EVENT LISTENERS ---
 
-// Para seleccionar la voz una vez que estén disponibles (esto puede tardar un poco)
 window.speechSynthesis.onvoiceschanged = function() {
-    // Esto asegura que la función readyVoice tendrá acceso a las voces la primera vez que se ejecute.
+    // Asegura que las voces se cargan para readyVoice
 };
 
 
@@ -364,11 +342,19 @@ function toggleControls(disable) {
     restTimeInput.disabled = disable;
     modeSelector.disabled = disable;
     
-    if (modeSelector.value !== 'pro') {
-        minDelayInput.disabled = disable;
-        maxDelayInput.disabled = disable;
+    // Solo deshabilitamos los retardos si el modo es Pro Y estamos en ejecución
+    const disableDelayInputs = modeSelector.value === 'pro' || disable;
+
+    minDelayInput.disabled = disableDelayInputs;
+    maxDelayInput.disabled = disableDelayInputs;
+
+    // Aseguramos que en modo manual, los inputs de retardo se desbloqueen si no estamos corriendo
+    if (modeSelector.value === 'manual' && !disable) {
+         minDelayInput.disabled = false;
+         maxDelayInput.disabled = false;
     }
 }
+
 
 startButton.addEventListener('click', () => {
     initAudioContext(); 
@@ -378,3 +364,19 @@ startButton.addEventListener('click', () => {
 stopButton.addEventListener('click', () => stopTimer(false));
 modeSelector.addEventListener('change', updateInterfaceByMode);
 document.addEventListener('DOMContentLoaded', updateInterfaceByMode);
+
+// PEQUEÑO ARREGLO: Forzar el cambio de la interfaz al cargar, para que el modo 'manual' se ajuste correctamente.
+document.addEventListener('DOMContentLoaded', () => {
+    updateInterfaceByMode();
+    // Añadir un listener para forzar que en modo manual min y max sean iguales
+    minDelayInput.addEventListener('change', () => {
+        if (modeSelector.value === 'manual') {
+            maxDelayInput.value = minDelayInput.value;
+        }
+    });
+    maxDelayInput.addEventListener('change', () => {
+        if (modeSelector.value === 'manual') {
+            minDelayInput.value = maxDelayInput.value;
+        }
+    });
+});
