@@ -1,4 +1,3 @@
-
 // --- DRY FIRE REFERENCES (EXISTING) ---
 const dryFireTab = document.getElementById('dryFireTab');
 const mmaTab = document.getElementById('mmaTab');
@@ -21,7 +20,7 @@ const maxDelayGroup = document.getElementById('maxDelayGroup');
 const container = document.querySelector('.container');
 const displayArea = document.querySelector('.display-area');
 const logPanel = document.getElementById('logPanel');
-const headerMotto = document.getElementById('header-motto'); // Referencia para el borde y color
+const headerMotto = document.getElementById('header-motto');
 
 // --- MMA TIMER REFERENCES (NEW) ---
 const mmaModeSelector = document.getElementById('mmaModeSelector');
@@ -62,20 +61,16 @@ let currentRestDuration = 0;
 
 
 // ----------------------------------------------------
-// --- FUNCIONES DE AUDIO GARANTIZADAS (CORRECCIÓN CLAVE) ---
+// --- AUDIO CONTEXT FUNCTIONS ---
 // ----------------------------------------------------
 
-// CORRECCIÓN CLAVE: Inicializa AudioContext y devuelve una Promesa para asegurar la reanudación
 function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    // Si el contexto está suspendido (requiere interacción del usuario)
     if (audioContext.state === 'suspended') {
-        // Devolvemos la promesa de reanudación
         return audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
-    // Devolvemos una promesa resuelta si ya está corriendo o inicializado
     return Promise.resolve();
 }
 
@@ -100,14 +95,31 @@ function playBeep(frequency, duration) {
     oscillator.stop(context.currentTime + duration / 1000);
 }
 
-// 1. Pitido de INICIO (2000 Hz, 200 ms) - DRY FIRE
+
+// ----------------------------------------------------
+// ✅ **DESBLOQUEO DE VOZ SAFARI (NUEVO)**
+// ----------------------------------------------------
+
+async function unlockTTS() {
+    return new Promise(resolve => {
+        const s = new SpeechSynthesisUtterance(" ");
+        s.volume = 0;
+        s.onend = resolve;
+        window.speechSynthesis.speak(s);
+    });
+}
+
+
+// ----------------------------------------------------
+// --- DRY FIRE SOUNDS & VOICE ---
+// ----------------------------------------------------
+
 function startBeep() {
     playBeep(2000, 200); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
-// 2. Pitido de TIEMPO LÍMITE (Doble, bajo) - DRY FIRE
 function parTimeBeep() {
     stopTimerDisplay(); 
     playBeep(400, 150);
@@ -116,7 +128,6 @@ function parTimeBeep() {
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
 
-// 3. Voz PREPARADO? - DRY FIRE
 function readyVoice() {
     if (speechAvailable) {
         window.speechSynthesis.cancel(); 
@@ -138,8 +149,9 @@ function readyVoice() {
     }
 }
 
+
 // ----------------------------------------------------
-// --- CRONÓMETRO DE ALTA PRECISIÓN (DRY FIRE) ---
+// --- HIGH PRECISION TIMER ---
 // ----------------------------------------------------
 
 function startTimerDisplay() {
@@ -172,7 +184,7 @@ function updateTimerDisplay() {
 
 
 // ----------------------------------------------------
-// --- LÓGICA DRY FIRE TIMER (FLUJO CONTINUO) ---
+// --- DRY FIRE LOGIC ---
 // ----------------------------------------------------
 
 function getRandomDelay(min, max) {
@@ -244,19 +256,16 @@ function runRepetition() {
         statusDisplay.textContent = `ESPERANDO SEÑAL...`;
     }
 
-    // Paso 1: Espera el Retardo Aleatorio -> startBeep
     mainTimerId = setTimeout(() => {
         if (!isRunningDryFire) return;
         
         startBeep();
         
-        // Paso 2: Espera el Tiempo Límite -> parTimeBeep y programar descanso
         mainTimerId = setTimeout(() => {
             if (!isRunningDryFire) return;
 
             parTimeBeep();
             
-            // Programar el descanso y el siguiente set
             if (currentRepetition < totalRepetitions) {
                 const rest = parseFloat(restTimeInput.value) * 1000;
                 statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
@@ -271,7 +280,6 @@ function runRepetition() {
 }
 
 
-// FUNCIÓN DE INICIO DRY FIRE
 function startDryFire() {
     if (isRunningDryFire) return;
     
@@ -293,7 +301,6 @@ function startDryFire() {
     runRepetition();
 }
 
-// Detiene el temporizador DRY FIRE
 function stopDryFire(completed = false) {
     clearTimeout(mainTimerId);
     stopTimerDisplay();
@@ -418,7 +425,7 @@ function getRoundDuration() {
 function startMMA() {
     if (isRunningMMA) return;
     initAudioContext();
-    stopDryFire(false); // Detiene Dry Fire si estaba corriendo
+    stopDryFire(false);
 
     totalRounds = parseInt(mmaRoundsInput.value);
     currentRestDuration = parseInt(mmaRestTimeInput.value);
@@ -479,7 +486,6 @@ function runMMASequence() {
         return;
     }
 
-    // 1. INICIAR ASALTO (ROUND)
     currentRound++;
     isRoundTime = true;
     currentRoundDuration = getRoundDuration();
@@ -496,7 +502,6 @@ function runMMASequence() {
 function startRest() {
     if (!isRunningMMA) return;
 
-    // 2. INICIAR DESCANSO (REST)
     isRoundTime = false;
     
     if (currentRound < totalRounds) {
@@ -515,7 +520,6 @@ function startRest() {
 function startMMACounter(duration, callback) {
     let timeLeft = duration;
     
-    // Clear any existing interval to prevent overlap
     clearInterval(mmaTimerId); 
 
     function updateCounter() {
@@ -546,7 +550,6 @@ function startMMACounter(duration, callback) {
     mmaTimerId = setInterval(updateCounter, 1000);
 }
 
-
 function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
     const row = mmaLogTableBody.insertRow();
     
@@ -567,7 +570,7 @@ function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
 
 
 // ----------------------------------------------------
-// --- GLOBAL EVENT LISTENERS & UI SWITCHING ---
+// --- UI & EVENTS ---
 // ----------------------------------------------------
 
 function setDryFireStyle() {
@@ -582,8 +585,7 @@ function setDryFireStyle() {
     document.querySelector('h1').style.color = green;
     document.querySelector('h1').style.textShadow = greenShadow;
     document.getElementById('counter').style.color = green;
-    
-    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
+
     document.getElementById('startButton').style.backgroundColor = green;
     document.getElementById('stopButton').style.backgroundColor = '#ff3d00';
 }
@@ -600,13 +602,11 @@ function setMMAStyle() {
     document.querySelector('h1').style.color = red;
     document.querySelector('h1').style.textShadow = redShadow;
     document.getElementById('mmaCounter').style.color = red;
-    
-    // Cambiar colores específicos de botones si fuera necesario (aunque ya están en CSS)
+
     document.getElementById('mmaStartButton').style.backgroundColor = red;
     document.getElementById('mmaStopButton').style.backgroundColor = '#00e676';
 }
 
-// Lógica de cambio de pestaña
 dryFireTab.addEventListener('click', () => {
     dryFireContent.classList.remove('hidden');
     mmaContent.classList.add('hidden');
@@ -629,32 +629,35 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// CORRECCIÓN DE INICIO DRY FIRE: Usar async/await para garantizar el audio.
+
+// ----------------------------------------------------
+// ✅ **BOTÓN INICIAR – PARCHE SAFARI (NUEVO)**
+// ----------------------------------------------------
+
 startButton.addEventListener('click', async () => {
-    // 1. Aseguramos que el AudioContext se inicialice y se reanude
-    await initAudioContext(); 
-    
-    // 2. Solo después de que el audio esté listo, iniciamos el flujo del temporizador
-    startDryFire(); 
+
+    await initAudioContext();
+
+    window.speechSynthesis.getVoices();
+
+    await unlockTTS();
+
+    startDryFire();
 });
+
 
 stopButton.addEventListener('click', () => stopDryFire(false));
 modeSelector.addEventListener('change', updateDryFireInterfaceByMode);
 
-// Event Listeners para MMA Timer 
 mmaStartButton.addEventListener('click', startMMA);
 mmaStopButton.addEventListener('click', stopMMA);
 mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
 
-
-// Inicialización al cargar
 document.addEventListener('DOMContentLoaded', () => {
-    // initAudioContext(); // No se llama aquí, se llama en el click.
     updateDryFireInterfaceByMode();
     updateMMAInterfaceByMode();
-    setDryFireStyle(); // Establece el estilo inicial como Dry Fire
+    setDryFireStyle();
     
-    // Sincronizar retardo en modo manual
     minDelayInput.addEventListener('change', () => {
         if (modeSelector.value === 'manual') {
             maxDelayInput.value = minDelayInput.value;
