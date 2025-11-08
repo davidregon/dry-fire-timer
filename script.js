@@ -97,55 +97,31 @@ function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
-// ✅ **DESBLOQUEO DE VOZ SAFARI (NUEVO)**
+// ✅ READY VOICE — AHORA MASCULINA
 // ----------------------------------------------------
-
-async function unlockTTS() {
-    return new Promise(resolve => {
-        const s = new SpeechSynthesisUtterance(" ");
-        s.volume = 0;
-        s.onend = resolve;
-        window.speechSynthesis.speak(s);
-    });
-}
-
-
-// ----------------------------------------------------
-// --- DRY FIRE SOUNDS & VOICE ---
-// ----------------------------------------------------
-
-function startBeep() {
-    playBeep(2000, 200); 
-    statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
-    startTimerDisplay();
-}
-
-function parTimeBeep() {
-    stopTimerDisplay(); 
-    playBeep(400, 150);
-    setTimeout(() => playBeep(400, 150), 200);
-
-    statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
-}
 
 function readyVoice() {
     if (speechAvailable) {
-        window.speechSynthesis.cancel(); 
-        
-        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
-        utterance.lang = 'es-ES'; 
-        utterance.rate = 1.0; 
-        
-        const voices = window.speechSynthesis.getVoices();
-        const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
+        window.speechSynthesis.cancel();
 
-        if (spanishVoice) {
-            utterance.voice = spanishVoice;
-        } 
-        
+        const utterance = new SpeechSynthesisUtterance("¿Preparado?");
+        utterance.lang = 'es-ES';
+        utterance.rate = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+
+        const maleVoice =
+            voices.find(v => /Jorge/i.test(v.name)) ||
+            voices.find(v => /Diego/i.test(v.name)) ||
+            voices.find(v => /Google español/i.test(v.name)) ||
+            voices.find(v => v.lang.startsWith("es") && v.name.toLowerCase().includes("male")) ||
+            voices.find(v => v.lang.startsWith("es"));
+
+        if (maleVoice) utterance.voice = maleVoice;
+
         window.speechSynthesis.speak(utterance);
     } else {
-        statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
+        statusDisplay.textContent = "PREPARADO... ESPERANDO SEÑAL";
     }
 }
 
@@ -631,18 +607,37 @@ mmaTab.addEventListener('click', () => {
 
 
 // ----------------------------------------------------
-// ✅ **BOTÓN INICIAR – PARCHE SAFARI (NUEVO)**
+// ✅ **BOTÓN INICIAR — PARCHE 100% COMPATIBLE GOODBARBER**
 // ----------------------------------------------------
 
-startButton.addEventListener('click', async () => {
+startButton.addEventListener('click', () => {
 
-    await initAudioContext();
+    // 1. Desbloqueo de AudioContext
+    initAudioContext();
 
-    window.speechSynthesis.getVoices();
+    // 2. Selección de voz masculina
+    const voices = window.speechSynthesis.getVoices();
 
-    await unlockTTS();
+    const unlockVoice =
+        voices.find(v => /Jorge/i.test(v.name)) ||
+        voices.find(v => /Diego/i.test(v.name)) ||
+        voices.find(v => /Google español/i.test(v.name)) ||
+        voices.find(v => v.lang.startsWith("es") && v.name.toLowerCase().includes("male")) ||
+        voices.find(v => v.lang.startsWith("es"));
 
-    startDryFire();
+    // 3. Primer utterance REAL que desbloquea TTS en WebView iOS
+    const unlock = new SpeechSynthesisUtterance("¿Preparado?");
+    unlock.lang = "es-ES";
+    unlock.volume = 1;
+
+    if (unlockVoice) unlock.voice = unlockVoice;
+
+    window.speechSynthesis.speak(unlock);
+
+    // 4. Iniciar el entrenamiento después del desbloqueo
+    setTimeout(() => {
+        startDryFire();
+    }, 120);
 });
 
 
