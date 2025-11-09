@@ -97,31 +97,41 @@ function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
-// ✅ READY VOICE — AHORA MASCULINA
+// --- DRY FIRE SOUNDS & VOICE ---
 // ----------------------------------------------------
+
+function startBeep() {
+    playBeep(2000, 200); 
+    statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
+    startTimerDisplay();
+}
+
+function parTimeBeep() {
+    stopTimerDisplay(); 
+    playBeep(400, 150);
+    setTimeout(() => playBeep(400, 150), 200);
+
+    statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
+}
 
 function readyVoice() {
     if (speechAvailable) {
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance("¿Preparado?");
-        utterance.lang = 'es-ES';
-        utterance.rate = 1.0;
-
+        window.speechSynthesis.cancel(); 
+        
+        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
+        utterance.lang = 'es-ES'; 
+        utterance.rate = 1.0; 
+        
         const voices = window.speechSynthesis.getVoices();
+        const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
 
-        const maleVoice =
-            voices.find(v => /Jorge/i.test(v.name)) ||
-            voices.find(v => /Diego/i.test(v.name)) ||
-            voices.find(v => /Google español/i.test(v.name)) ||
-            voices.find(v => v.lang.startsWith("es") && v.name.toLowerCase().includes("male")) ||
-            voices.find(v => v.lang.startsWith("es"));
-
-        if (maleVoice) utterance.voice = maleVoice;
-
+        if (spanishVoice) {
+            utterance.voice = spanishVoice;
+        } 
+        
         window.speechSynthesis.speak(utterance);
     } else {
-        statusDisplay.textContent = "PREPARADO... ESPERANDO SEÑAL";
+        statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
     }
 }
 
@@ -607,34 +617,21 @@ mmaTab.addEventListener('click', () => {
 
 
 // ----------------------------------------------------
-// ✅ **BOTÓN INICIAR — PARCHE 100% COMPATIBLE GOODBARBER**
+// ✅ **BOTÓN INICIAR – PARCHE ESPECIAL PARA GOODBARBER**
 // ----------------------------------------------------
 
 startButton.addEventListener('click', () => {
 
-    // 1. Desbloqueo de AudioContext
+    // 1. Habilitar AudioContext
     initAudioContext();
 
-    // 2. Selección de voz masculina
-    const voices = window.speechSynthesis.getVoices();
-
-    const unlockVoice =
-        voices.find(v => /Jorge/i.test(v.name)) ||
-        voices.find(v => /Diego/i.test(v.name)) ||
-        voices.find(v => /Google español/i.test(v.name)) ||
-        voices.find(v => v.lang.startsWith("es") && v.name.toLowerCase().includes("male")) ||
-        voices.find(v => v.lang.startsWith("es"));
-
-    // 3. Primer utterance REAL que desbloquea TTS en WebView iOS
-    const unlock = new SpeechSynthesisUtterance("¿Preparado?");
+    // 2. Utterance REAL obligatorio para desbloquear TTS en WebView iOS
+    const unlock = new SpeechSynthesisUtterance("Preparado");
     unlock.lang = "es-ES";
     unlock.volume = 1;
-
-    if (unlockVoice) unlock.voice = unlockVoice;
-
     window.speechSynthesis.speak(unlock);
 
-    // 4. Iniciar el entrenamiento después del desbloqueo
+    // 3. Iniciar entrenamiento tras desbloqueo
     setTimeout(() => {
         startDryFire();
     }, 120);
