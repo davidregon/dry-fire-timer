@@ -97,6 +97,20 @@ function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
+// ✅ **DESBLOQUEO DE VOZ SAFARI (NUEVO)**
+// ----------------------------------------------------
+
+async function unlockTTS() {
+    return new Promise(resolve => {
+        const s = new SpeechSynthesisUtterance(" ");
+        s.volume = 0;
+        s.onend = resolve;
+        window.speechSynthesis.speak(s);
+    });
+}
+
+
+// ----------------------------------------------------
 // --- DRY FIRE SOUNDS & VOICE ---
 // ----------------------------------------------------
 
@@ -617,24 +631,18 @@ mmaTab.addEventListener('click', () => {
 
 
 // ----------------------------------------------------
-// ✅ **BOTÓN INICIAR – PARCHE ESPECIAL PARA GOODBARBER**
+// ✅ **BOTÓN INICIAR – PARCHE SAFARI (NUEVO)**
 // ----------------------------------------------------
 
-startButton.addEventListener('click', () => {
+startButton.addEventListener('click', async () => {
 
-    // 1. Habilitar AudioContext
-    initAudioContext();
+    await initAudioContext();
 
-    // 2. Utterance REAL obligatorio para desbloquear TTS en WebView iOS
-    const unlock = new SpeechSynthesisUtterance("Preparado");
-    unlock.lang = "es-ES";
-    unlock.volume = 1;
-    window.speechSynthesis.speak(unlock);
+    window.speechSynthesis.getVoices();
 
-    // 3. Iniciar entrenamiento tras desbloqueo
-    setTimeout(() => {
-        startDryFire();
-    }, 120);
+    await unlockTTS();
+
+    startDryFire();
 });
 
 
