@@ -57,59 +57,7 @@ let currentRound = 0;
 let totalRounds = 0;
 let isRoundTime = false;
 let currentRoundDuration = 0;
-let currentRestDuration = 0;
-
-
-// ----------------------------------------------------
-// 🔥 WAKE LOCK — ANDROID + iOS
-// ----------------------------------------------------
-
-let wakeLock = null;
-
-// Android / Chrome Wake Lock
-async function requestWakeLock() {
-    try {
-        if ("wakeLock" in navigator) {
-            wakeLock = await navigator.wakeLock.request("screen");
-            wakeLock.addEventListener("release", () =>
-                console.log("Wake Lock liberado")
-            );
-            console.log("Wake Lock activo");
-        }
-    } catch (err) {
-        console.error("Wake Lock error:", err);
-    }
-}
-
-function releaseWakeLock() {
-    if (wakeLock) {
-        wakeLock.release();
-        wakeLock = null;
-    }
-}
-
-// iOS — Truco del vídeo invisible
-function enableIOSWakeLock() {
-    const video = document.getElementById("iosWakeLock");
-    if (video) video.play().catch(() => {});
-}
-
-function disableIOSWakeLock() {
-    const video = document.getElementById("iosWakeLock");
-    if (video) video.pause();
-}
-
-// Activa ambos
-function activateWakeLock() {
-    requestWakeLock();
-    enableIOSWakeLock();
-}
-
-// Libera ambos
-function deactivateWakeLock() {
-    releaseWakeLock();
-    disableIOSWakeLock();
-}
+let currentRestDuration = 0; 
 
 
 // ----------------------------------------------------
@@ -120,36 +68,63 @@ function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    // Si está suspendido, reanudarlo (devuelve Promise)
     if (audioContext.state === 'suspended') {
         return audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
     return Promise.resolve();
 }
 
-function playBeep(frequency, duration) {
-    if (!audioContext) {
-        console.warn("AudioContext no inicializado.");
-        return;
+/**
+ * playBeep: ahora asíncrona. Se asegura de que el AudioContext esté inicializado
+ * y reanudado antes de crear oscilador/gain y emitir el sonido.
+ */
+async function playBeep(frequency, duration) {
+    try {
+        await initAudioContext();
+
+        if (!audioContext) {
+            console.warn("AudioContext no inicializado.");
+            return;
+        }
+
+        const context = audioContext;
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+
+        // Tipo y frecuencia
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+
+        // Control de volumen (evita pops subiendo rápidamente)
+        gainNode.gain.setValueAtTime(0.0001, context.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.5, context.currentTime + 0.01);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        oscillator.start(context.currentTime);
+        oscillator.stop(context.currentTime + duration / 1000);
+
+        // Fade out rápido para evitar clicks
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration / 1000 - 0.01);
+
+        // Liberar referencias tras terminar (seguro)
+        setTimeout(() => {
+            try {
+                oscillator.disconnect();
+                gainNode.disconnect();
+            } catch (e) { /* no hacer nada */ }
+        }, duration + 50);
+
+    } catch (e) {
+        console.error("playBeep error:", e);
     }
-    
-    const context = audioContext;
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-
-    oscillator.type = 'square';
-    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
-    
-    gainNode.gain.setValueAtTime(0.5, context.currentTime); 
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-
-    oscillator.start(context.currentTime);
-    oscillator.stop(context.currentTime + duration / 1000);
 }
 
 
 // ----------------------------------------------------
-// DESBLOQUEO DE VOZ SAFARI
+// ✅ **DESBLOQUEO DE VOZ SAFARI (NUEVO)**
 // ----------------------------------------------------
 
 async function unlockTTS() {
@@ -167,6 +142,7 @@ async function unlockTTS() {
 // ----------------------------------------------------
 
 function startBeep() {
+    // playBeep es async pero no necesitamos await aquí (fire-and-forget).
     playBeep(2000, 200); 
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
@@ -174,6 +150,7 @@ function startBeep() {
 
 function parTimeBeep() {
     stopTimerDisplay(); 
+    // Doble pitido con pequeño delay — playBeep maneja initAudioContext internamente
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
@@ -189,7 +166,7 @@ function readyVoice() {
         utterance.rate = 1.0; 
         
         const voices = window.speechSynthesis.getVoices();
-        const spanishVoice = voices.find(voice => voice.lang.startsWith('es'));
+        const spanishVoice = voices.find(voice => voice.lang && voice.lang.startsWith('es'));
 
         if (spanishVoice) {
             utterance.voice = spanishVoice;
@@ -311,6 +288,7 @@ function runRepetition() {
     mainTimerId = setTimeout(() => {
         if (!isRunningDryFire) return;
         
+        // startBeep usa playBeep internamente (que reanudará el AudioContext si hace falta)
         startBeep();
         
         mainTimerId = setTimeout(() => {
@@ -334,8 +312,6 @@ function runRepetition() {
 
 function startDryFire() {
     if (isRunningDryFire) return;
-
-    activateWakeLock(); // 🔥 EVITA APAGADO DE PANTALLA
     
     totalRepetitions = parseInt(repetitionsInput.value);
     if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
@@ -356,8 +332,6 @@ function startDryFire() {
 }
 
 function stopDryFire(completed = false) {
-    deactivateWakeLock(); // 🔥 APAGA WAKELOCK AL TERMINAR
-
     clearTimeout(mainTimerId);
     stopTimerDisplay();
     isRunningDryFire = false;
@@ -480,9 +454,7 @@ function getRoundDuration() {
 
 function startMMA() {
     if (isRunningMMA) return;
-
-    activateWakeLock(); // 🔥 Evita que se apague la pantalla
-
+    // Intentamos inicializar audio desde el arranque (gesture-based start)
     initAudioContext();
     stopDryFire(false);
 
@@ -507,8 +479,6 @@ function startMMA() {
 }
 
 function stopMMA() {
-    deactivateWakeLock(); // 🔥 Libera pantalla
-
     clearTimeout(mmaTimerId);
     clearInterval(mmaTimerId);
     isRunningMMA = false;
@@ -540,6 +510,7 @@ function runMMASequence() {
     if (currentRound >= totalRounds) {
         mmaStatusDisplay.textContent = '¡ENTRENAMIENTO COMPLETADO!';
         mmaCurrentRoundDisplay.textContent = 'ASALTO: COMPLETO';
+        // triple beep final (playBeep internamente reanudará audio si hace falta)
         playBeep(400, 500); 
         setTimeout(() => playBeep(400, 500), 600);
         setTimeout(() => playBeep(400, 500), 1200);
@@ -555,8 +526,10 @@ function runMMASequence() {
 
     mmaStatusDisplay.textContent = '¡ASALTO!';
     mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
+    // inicio de asalto
     playBeep(800, 500); 
     
+    // arrancar contador (startMMACounter es async pero no es necesario await aquí)
     startMMACounter(currentRoundDuration, startRest);
 }
 
@@ -578,7 +551,14 @@ function startRest() {
     }
 }
 
-function startMMACounter(duration, callback) {
+/**
+ * startMMACounter: ahora asíncrona al inicio para asegurar initAudioContext antes de
+ * posibles beeps en la cuenta atrás. Sigue usando setInterval/clearInterval como antes.
+ */
+async function startMMACounter(duration, callback) {
+    // Asegurar AudioContext activo antes de los avisos
+    await initAudioContext().catch(() => { /* no romper la ejecución si falla */ });
+
     let timeLeft = duration;
     
     clearInterval(mmaTimerId); 
@@ -596,6 +576,7 @@ function startMMACounter(duration, callback) {
             }
         }
         if (timeLeft <= 3 && timeLeft > 0) {
+            // playBeep internamente reanudará audio si es necesario
             playBeep(isRoundTime ? 1000 : 600, 100); 
         }
 
@@ -692,13 +673,14 @@ mmaTab.addEventListener('click', () => {
 
 
 // ----------------------------------------------------
-// BOTÓN INICIAR – PARCHE SAFARI
+// ✅ **BOTÓN INICIAR – PARCHE SAFARI (NUEVO)**
 // ----------------------------------------------------
 
 startButton.addEventListener('click', async () => {
 
     await initAudioContext();
 
+    // Forzar carga de voces (algunos Safari necesitan getVoices() llamado tras interacción)
     window.speechSynthesis.getVoices();
 
     await unlockTTS();
