@@ -186,25 +186,25 @@ function readyVoice() {
         // cancelar voces previas
         window.speechSynthesis.cancel();
 
-        const utterance = new SpeechSynthesisUtterance("PREPARADO?");
-        utterance.lang = 'es-ES';
-        utterance.rate = 1.0;
+        // --- CORRECCIÓN APLICADA AQUÍ ---
+        setTimeout(() => {
+            try {
+                const u = new SpeechSynthesisUtterance("Preparado?");
+                u.lang = "es-ES";
+                u.volume = 1;
+                u.rate = 1;
+                u.pitch = 1;
 
-        // getVoices puede devolver [] la primera vez; envolver en try/catch
-        try {
-            const voices = window.speechSynthesis.getVoices() || [];
-            const spanishVoice = voices.find(v => v && v.lang && v.lang.startsWith && v.lang.startsWith('es'));
-            if (spanishVoice) utterance.voice = spanishVoice;
-        } catch (e) {
-            // no crítico
-        }
+                // failsafe para Android
+                u.onerror = () => console.log("TTS error");
 
-        try {
-            window.speechSynthesis.speak(utterance);
-        } catch (e) {
-            // fallback silencioso
-            console.warn("speechSynthesis.speak fallo:", e);
-        }
+                speechSynthesis.speak(u);
+            } catch (e) {
+                console.log("Error al reproducir 'Preparado?':", e);
+            }
+        }, 400);  // este retraso es la clave
+        // --------------------------------
+
     } catch (e) {
         statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
     }
