@@ -59,7 +59,7 @@ let currentRestDuration = 0;
 
 
 // ----------------------------------------------------
-// --- AUDIO CONTEXT FUNCTIONS ---
+// --- AUDIO CONTEXT FUNCTIONS (MEJORADO) ---
 // ----------------------------------------------------
 
 function initAudioContext() {
@@ -76,7 +76,8 @@ function initAudioContext() {
     return Promise.resolve();
 }
 
-async function playBeep(frequency, duration) {
+// Función básica para pitidos normales (Ready, Par Time, MMA)
+async function playBeep(frequency, duration, type = 'square', volume = 1.0) {
     try {
         await initAudioContext();
         if (!audioContext) return;
@@ -85,12 +86,11 @@ async function playBeep(frequency, duration) {
         const oscillator = context.createOscillator();
         const gainNode = context.createGain();
 
-        oscillator.type = 'square';
+        oscillator.type = type;
         oscillator.frequency.setValueAtTime(frequency, context.currentTime);
 
-        // Subir volumen rápido y bajar al final para evitar "clic"
-        gainNode.gain.setValueAtTime(0.0001, context.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.5, context.currentTime + 0.01);
+        // Ataque instantáneo para que suene más golpeado
+        gainNode.gain.setValueAtTime(volume, context.currentTime);
 
         oscillator.connect(gainNode);
         gainNode.connect(context.destination);
@@ -98,7 +98,9 @@ async function playBeep(frequency, duration) {
         oscillator.start(context.currentTime);
         oscillator.stop(context.currentTime + duration / 1000);
 
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration / 1000 - 0.01);
+        // Pequeño fade out muy rápido al final para evitar "pop"
+        gainNode.gain.setValueAtTime(volume, context.currentTime + duration / 1000 - 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, context.currentTime + duration / 1000);
 
         setTimeout(() => {
             try { oscillator.disconnect(); gainNode.disconnect(); } catch {}
@@ -109,32 +111,81 @@ async function playBeep(frequency, duration) {
     }
 }
 
+// NUEVA FUNCIÓN ESPECIAL PARA EL SONIDO DE "FUEGO" POTENTE
+// Combina dos osciladores para crear un efecto de disonancia estilo "Shot Timer" profesional
+async function playPowerFireSignal() {
+    try {
+        await initAudioContext();
+        if (!audioContext) return;
+        const ctx = audioContext;
+        const t = ctx.currentTime;
+        const duration = 0.35; // 350ms de duración (un poco más largo)
+
+        // Oscilador 1: Frecuencia Principal (Aguda y penetrante)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sawtooth'; // Dientes de sierra corta más que la cuadrada
+        osc1.frequency.setValueAtTime(2000, t); 
+        
+        // Oscilador 2: Frecuencia Desafinada (Crea el efecto de potencia/vibración)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'square'; 
+        osc2.frequency.setValueAtTime(2025, t); // 25Hz de diferencia crea la "rugosidad"
+
+        // Configuración de volumen al MÁXIMO
+        gain1.gain.setValueAtTime(0.6, t); // Sumados dan > 1.0, pero el limitador del navegador lo maneja
+        gain2.gain.setValueAtTime(0.6, t);
+
+        osc1.connect(gain1);
+        osc2.connect(gain2);
+        gain1.connect(ctx.destination);
+        gain2.connect(ctx.destination);
+
+        osc1.start(t);
+        osc2.start(t);
+        
+        osc1.stop(t + duration);
+        osc2.stop(t + duration);
+
+        // Limpieza
+        setTimeout(() => {
+            try { 
+                osc1.disconnect(); gain1.disconnect(); 
+                osc2.disconnect(); gain2.disconnect();
+            } catch {}
+        }, (duration * 1000) + 100);
+
+    } catch (e) {
+        console.error("PowerBeep error", e);
+    }
+}
+
 
 // ----------------------------------------------------
 // --- SONIDOS ---
 // ----------------------------------------------------
 
 function readySignal() {
-    // Señal de "Preparado": Dos pitidos medios-graves rápidos
-    // Tono 600Hz (más grave que el de fuego que es 2000Hz)
-    playBeep(600, 100);
-    setTimeout(() => playBeep(600, 100), 150);
+    // Señal de "Preparado": Dos pitidos graves
+    playBeep(600, 100, 'square', 0.8);
+    setTimeout(() => playBeep(600, 100, 'square', 0.8), 150);
     
     statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
 }
 
 function startBeep() {
-    // Señal de "FUEGO": Un pitido muy agudo y cortante
-    playBeep(2000, 250);
+    // Señal de "FUEGO": NUEVA VERSIÓN POTENTE
+    playPowerFireSignal();
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
 function parTimeBeep() {
-    // Señal de Tiempo Límite: Dos pitidos graves
+    // Señal de Tiempo Límite: Dos pitidos muy graves
     stopTimerDisplay();
-    playBeep(400, 150);
-    setTimeout(() => playBeep(400, 150), 200);
+    playBeep(350, 200, 'sine', 1.0);
+    setTimeout(() => playBeep(350, 200, 'sine', 1.0), 250);
 
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
 }
@@ -229,7 +280,7 @@ function runRepetition() {
         createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime);
         currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-        // 1. Sonido de "Preparado" (Bip-Bip grave)
+        // 1. Sonido de "Preparado"
         readySignal();
 
         const delayToUse = getRandomDelay(minDelay, maxDelay);
@@ -239,7 +290,7 @@ function runRepetition() {
         mainTimerId = setTimeout(() => {
             if (!isRunningDryFire) return;
             
-            // 2. Sonido de Fuego (Biiip agudo)
+            // 2. Sonido de Fuego POTENTE
             startBeep();
 
             // Timer para el tiempo límite (PAR Time)
@@ -438,9 +489,9 @@ function runMMASequence() {
     if (currentRound >= totalRounds) {
         mmaStatusDisplay.textContent = '¡ENTRENAMIENTO COMPLETADO!';
         mmaCurrentRoundDisplay.textContent = 'ASALTO: COMPLETO';
-        playBeep(400, 500);
-        setTimeout(() => playBeep(400, 500), 600);
-        setTimeout(() => playBeep(400, 500), 1200);
+        playBeep(400, 500, 'square', 1.0);
+        setTimeout(() => playBeep(400, 500, 'square', 1.0), 600);
+        setTimeout(() => playBeep(400, 500, 'square', 1.0), 1200);
         stopMMA();
         return;
     }
@@ -450,7 +501,9 @@ function runMMASequence() {
     mmaLogEntry('ASALTO', currentRound, currentRoundDuration / 60, currentRestDuration);
     mmaStatusDisplay.textContent = '¡ASALTO!';
     mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
-    playBeep(800, 500);
+    
+    // Sonido de Inicio de Ronda (Gong/Largo)
+    playBeep(800, 700, 'sawtooth', 1.0);
     startMMACounter(currentRoundDuration, startRest);
 }
 
@@ -460,7 +513,7 @@ function startRest() {
     if (currentRound < totalRounds) {
         mmaStatusDisplay.textContent = '¡TIEMPO! DESCANSO.';
         mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: DESCANSO`;
-        playBeep(400, 500);
+        playBeep(400, 500, 'square', 1.0);
         mmaLogEntry('DESCANSO', currentRound, currentRoundDuration / 60, currentRestDuration);
         startMMACounter(currentRestDuration, runMMASequence);
     } else {
@@ -479,7 +532,7 @@ async function startMMACounter(duration, callback) {
         mmaCounterDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         
         if (timeLeft <= 3 && timeLeft > 0) {
-            playBeep(isRoundTime ? 1000 : 600, 100);
+            playBeep(isRoundTime ? 1000 : 600, 100, 'square', 0.8);
         }
         if (timeLeft <= 0) {
             clearInterval(mmaTimerId);
@@ -562,13 +615,10 @@ mmaTab.addEventListener('click', () => {
     updateMMAInterfaceByMode();
 });
 
-// EVENTO SIMPLE - CLICK DIRECTO (Ya no hace falta doble click porque es solo sonido)
+// EVENTO SIMPLE - CLICK DIRECTO
 startButton.addEventListener('click', async () => {
     if (startButton.disabled) return;
-    
-    // Iniciar contexto de audio con un gesto de usuario
     await initAudioContext();
-    
     startDryFire();
 });
 
