@@ -46,11 +46,14 @@ let startTime = 0;
 let isRunningDryFire = false; 
 let isRunningMMA = false; 
 
+// --- AUDIO STATE ---
+// Variable para controlar el desbloqueo en dos pasos
+let isAudioUnlocked = false; 
+
 // --- DRY FIRE STATE ---
 let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
-// mejor comprobación defensiva
 let speechAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window && typeof window.speechSynthesis.speak === 'function';
 
 // --- MMA TIMER STATE ---
@@ -119,17 +122,15 @@ async function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
-// ✅ DESBLOQUEO DE VOZ – PARCHE ANDROID + iOS (MEJORADO)
+// ✅ DESBLOQUEO DE VOZ – PARCHE ANDROID + iOS
 // ----------------------------------------------------
-// Nota: nunca debe colgarse; incluye failsafe interno y onerror.
-// Devuelve Promise que se resuelve siempre.
 function unlockTTS(timeoutMs = 1200) {
     return new Promise(resolve => {
         if (!speechAvailable) return resolve();
         try {
             const u = new SpeechSynthesisUtterance("listo");
             u.lang = "es-ES";
-            u.volume = 0.01;  // volumen mínimo (Android no acepta 0)
+            u.volume = 0.01;  // volumen mínimo pero audible para el sistema
             u.rate = 1;
             u.pitch = 1;
 
@@ -139,15 +140,12 @@ function unlockTTS(timeoutMs = 1200) {
             u.onend = finish;
             u.onerror = finish;
 
-            // Intenta hablar (debe estar dentro de gesture -> click)
             try {
                 window.speechSynthesis.speak(u);
             } catch (e) {
-                // si falla speak por cualquier motivo no bloquear
                 finish();
             }
 
-            // failsafe: si no hay evento onend/onerror resolver de todos modos
             setTimeout(finish, timeoutMs);
 
         } catch (e) {
@@ -162,7 +160,6 @@ function unlockTTS(timeoutMs = 1200) {
 // ----------------------------------------------------
 
 function startBeep() {
-    // fire-and-forget
     playBeep(2000, 200);
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
@@ -183,10 +180,9 @@ function readyVoice() {
     }
 
     try {
-        // cancelar voces previas
         window.speechSynthesis.cancel();
 
-        // --- CORRECCIÓN APLICADA AQUÍ ---
+        // Retraso clave para Android
         setTimeout(() => {
             try {
                 const u = new SpeechSynthesisUtterance("Preparado?");
@@ -202,8 +198,7 @@ function readyVoice() {
             } catch (e) {
                 console.log("Error al reproducir 'Preparado?':", e);
             }
-        }, 400);  // este retraso es la clave
-        // --------------------------------
+        }, 400); 
 
     } catch (e) {
         statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
@@ -247,17 +242,14 @@ function updateTimerDisplay() {
 // --- DRY FIRE LOGIC ---
 // ----------------------------------------------------
 
-// acepta strings o números; devuelve ms
 function getRandomDelay(min, max) {
     const minNum = parseFloat(min);
     const maxNum = parseFloat(max);
     const minMs = minNum * 1000;
     const maxMs = maxNum * 1000;
 
-    if (Number.isNaN(minMs) || Number.isNaN(maxMs)) return 1000; // fallback 1s
-
+    if (Number.isNaN(minMs) || Number.isNaN(maxMs)) return 1000; 
     if (minMs === maxMs) return minMs;
-
     return Math.random() * (maxMs - minMs) + minMs;
 }
 
@@ -288,13 +280,10 @@ function runRepetition() {
         if (currentMode === 'pro') {
             const rangeMin = 1.0;
             const rangeMax = 6.0;
-
             const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
             const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
-
             minDelay = parseFloat(newMin.toFixed(1));
             maxDelay = parseFloat(newMax.toFixed(1));
-
             minDelayInput.value = minDelay;
             maxDelayInput.value = maxDelay;
         }
@@ -311,7 +300,7 @@ function runRepetition() {
         createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime);
         currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-        // voz de preparación (no bloqueante)
+        // Llamada a voz corregida
         readyVoice();
 
         const delayToUse = getRandomDelay(minDelay, maxDelay);
@@ -382,12 +371,16 @@ function stopDryFire(completed = false) {
         clearTimeout(mainTimerId);
         stopTimerDisplay();
         isRunningDryFire = false;
+        // Al parar, reseteamos el "estado" del botón, pero NO la variable isAudioUnlocked
+        // para que no tengan que hacer doble click cada vez en la misma sesión.
+        // Si quisieras obligar siempre a doble click, pon isAudioUnlocked = false aquí.
 
         if (speechAvailable) {
             try { window.speechSynthesis.cancel(); } catch(e){}
         }
 
         toggleDryFireControls(false);
+        startButton.textContent = "INICIAR"; // Restaurar texto original
 
         if (completed) {
             statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
@@ -451,7 +444,8 @@ function updateDryFireInterfaceByMode() {
         minDelayInput.disabled = false;
     }
 
-    startButton.textContent = 'INICIAR';
+    // Si ya está desbloqueado, texto normal, si no, texto inicial
+    startButton.textContent = isAudioUnlocked ? 'INICIAR' : 'INICIAR';
     statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
     counterDisplay.textContent = '00.00';
     currentSetDisplay.textContent = 'Set: 0/0';
@@ -486,7 +480,6 @@ function getRoundDuration() {
 
         return randomMinutes * 60;
     }
-
     return parseInt(mmaRoundTimeInput.value) * 60;
 }
 
@@ -723,47 +716,56 @@ mmaTab.addEventListener('click', () => {
 
 
 // ----------------------------------------------------
-// ✅ BOTÓN INICIAR – SECUENCIA SEGURA UNIVERSAL (CON TIMEOUT)
+// ✅ LÓGICA DE INICIO EN DOS PASOS (CORREGIDO)
 // ----------------------------------------------------
-// Mejora: si unlockTTS se comporta raro, no bloquea el inicio nunca.
-
 startButton.addEventListener('click', async () => {
-    // Protección: si el botón está deshabilitado, no hacemos nada
     if (startButton.disabled) return;
 
+    // 🔴 PASO 1: Si es la PRIMERA VEZ (no desbloqueado), solo desbloqueamos y paramos.
+    if (!isAudioUnlocked) {
+        startButton.disabled = true;
+        statusDisplay.textContent = "ACTIVANDO AUDIO...";
+
+        try {
+            // 1. Inicializar AudioContext
+            await initAudioContext().catch(() => {});
+            
+            // 2. Inicializar Voces (parche Chrome)
+            try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
+
+            // 3. Desbloquear TTS (habla muda para activar motor)
+            if (speechAvailable) {
+                await unlockTTS(800); // Espera max 0.8s
+            }
+
+            // 4. CAMBIAR ESTADO: Ahora sí está listo
+            isAudioUnlocked = true; 
+            
+            // 5. Feedback visual
+            startButton.textContent = "CONFIRMAR INICIO";
+            statusDisplay.textContent = "AUDIO ACTIVADO. PULSA OTRA VEZ PARA EMPEZAR.";
+
+        } catch (e) {
+            console.warn("Error activando audio:", e);
+        } finally {
+            startButton.disabled = false;
+        }
+        
+        // 🛑 IMPORTANTE: Aquí hacemos return. NO inicia el timer.
+        // El usuario debe pulsar de nuevo.
+        return; 
+    }
+
+    // 🟢 PASO 2: Si ya está desbloqueado, ejecutamos la lógica normal
     // Desactivar momentáneamente para evitar doble-click
     startButton.disabled = true;
-
     try {
-        // 1) Intentar inicializar AudioContext (no fatal)
-        await initAudioContext().catch(() => {});
-
-        // 2) Intentar forzar carga de voces (algunos motores lo requieren)
-        try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
-
-        // 3) Intentar desbloquear TTS pero con timeout corto (failsafe)
-        if (speechAvailable) {
-            // Promise.race por seguridad: si tarda >1200ms sigue adelante
-            await Promise.race([
-                unlockTTS(1000),
-                new Promise(res => setTimeout(res, 1100))
-            ]);
-        }
-
+        startDryFire();
     } catch (e) {
-        console.warn("startButton sequence fallo (seguimos adelante):", e);
+        console.error("startDryFire lanzamiento fallo:", e);
+        toggleDryFireControls(false);
     } finally {
-        // Siempre arrancar el dry fire aunque TTS/audio fallen
-        try {
-            startDryFire();
-        } catch (e) {
-            console.error("startDryFire lanzamiento fallo:", e);
-            // restaurar estado UI
-            toggleDryFireControls(false);
-        } finally {
-            // permitir botón si no está corriendo (startDryFire lo desactivará si procede)
-            if (!isRunningDryFire) startButton.disabled = false;
-        }
+        if (!isRunningDryFire) startButton.disabled = false;
     }
 });
 
