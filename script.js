@@ -68,35 +68,24 @@ function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    // Si está suspendido, reanudarlo (devuelve Promise)
     if (audioContext.state === 'suspended') {
         return audioContext.resume().catch(e => console.error("Error al reanudar AudioContext:", e));
     }
     return Promise.resolve();
 }
 
-/**
- * playBeep: ahora asíncrona. Se asegura de que el AudioContext esté inicializado
- * y reanudado antes de crear oscilador/gain y emitir el sonido.
- */
 async function playBeep(frequency, duration) {
     try {
         await initAudioContext();
-
-        if (!audioContext) {
-            console.warn("AudioContext no inicializado.");
-            return;
-        }
+        if (!audioContext) return;
 
         const context = audioContext;
         const oscillator = context.createOscillator();
         const gainNode = context.createGain();
 
-        // Tipo y frecuencia
         oscillator.type = 'square';
         oscillator.frequency.setValueAtTime(frequency, context.currentTime);
 
-        // Control de volumen (evita pops subiendo rápidamente)
         gainNode.gain.setValueAtTime(0.0001, context.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.5, context.currentTime + 0.01);
 
@@ -106,15 +95,16 @@ async function playBeep(frequency, duration) {
         oscillator.start(context.currentTime);
         oscillator.stop(context.currentTime + duration / 1000);
 
-        // Fade out rápido para evitar clicks
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration / 1000 - 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(
+            0.0001, 
+            context.currentTime + duration / 1000 - 0.01
+        );
 
-        // Liberar referencias tras terminar (seguro)
         setTimeout(() => {
             try {
                 oscillator.disconnect();
                 gainNode.disconnect();
-            } catch (e) { /* no hacer nada */ }
+            } catch {}
         }, duration + 50);
 
     } catch (e) {
@@ -124,15 +114,29 @@ async function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
-// ✅ **DESBLOQUEO DE VOZ SAFARI (NUEVO)**
+// ✅ **DESBLOQUEO DE VOZ – PARCHE 100% ANDROID + iOS** 
 // ----------------------------------------------------
 
 async function unlockTTS() {
     return new Promise(resolve => {
-        const s = new SpeechSynthesisUtterance(" ");
-        s.volume = 0;
-        s.onend = resolve;
-        window.speechSynthesis.speak(s);
+        try {
+            const u = new SpeechSynthesisUtterance("listo");
+            u.lang = "es-ES";
+            u.volume = 0.01;  // Android NO acepta 0 → volumen mínimo real
+            u.rate = 1;
+            u.pitch = 1;
+
+            u.onend = resolve;
+            u.onerror = resolve;
+
+            window.speechSynthesis.speak(u);
+
+            // Failsafe universal
+            setTimeout(resolve, 1200);
+
+        } catch {
+            resolve();
+        }
     });
 }
 
@@ -142,15 +146,13 @@ async function unlockTTS() {
 // ----------------------------------------------------
 
 function startBeep() {
-    // playBeep es async pero no necesitamos await aquí (fire-and-forget).
-    playBeep(2000, 200); 
+    playBeep(2000, 200);
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
 function parTimeBeep() {
-    stopTimerDisplay(); 
-    // Doble pitido con pequeño delay — playBeep maneja initAudioContext internamente
+    stopTimerDisplay();
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
@@ -159,20 +161,18 @@ function parTimeBeep() {
 
 function readyVoice() {
     if (speechAvailable) {
-        window.speechSynthesis.cancel(); 
+        window.speechSynthesis.cancel();
         
-        const utterance = new SpeechSynthesisUtterance("PREPARADO?"); 
-        utterance.lang = 'es-ES'; 
-        utterance.rate = 1.0; 
+        const utterance = new SpeechSynthesisUtterance("PREPARADO?");
+        utterance.lang = 'es-ES';
+        utterance.rate = 1.0;
         
         const voices = window.speechSynthesis.getVoices();
-        const spanishVoice = voices.find(voice => voice.lang && voice.lang.startsWith('es'));
+        const spanishVoice = voices.find(v => v.lang && v.lang.startsWith('es'));
+        if (spanishVoice) utterance.voice = spanishVoice;
 
-        if (spanishVoice) {
-            utterance.voice = spanishVoice;
-        } 
-        
         window.speechSynthesis.speak(utterance);
+
     } else {
         statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
     }
@@ -201,12 +201,11 @@ function updateTimerDisplay() {
     if (!isCountingTime) return;
 
     const elapsedTime = Date.now() - startTime;
-    
     const seconds = Math.floor(elapsedTime / 1000);
     const centiseconds = Math.floor((elapsedTime % 1000) / 10);
 
-    const formattedTime = `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-    counterDisplay.textContent = formattedTime;
+    counterDisplay.textContent =
+        `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 
     animationFrameId = requestAnimationFrame(updateTimerDisplay);
 }
@@ -217,14 +216,12 @@ function updateTimerDisplay() {
 // ----------------------------------------------------
 
 function getRandomDelay(min, max) {
-    const minMs = parseFloat(min) * 1000;
-    const maxMs = parseFloat(max) * 1000;
-    const delay = Math.random() * (maxMs - minMs) + minMs;
-    
-    if (minMs === maxMs) {
-        return minMs;
-    }
-    return delay;
+    const minMs = min * 1000;
+    const maxMs = max * 1000;
+
+    if (minMs === maxMs) return minMs;
+
+    return Math.random() * (maxMs - minMs) + minMs;
 }
 
 function runRepetition() {
@@ -240,92 +237,89 @@ function runRepetition() {
     let minDelay = parseFloat(minDelayInput.value);
     let maxDelay = parseFloat(maxDelayInput.value);
     let parTime = parseFloat(parTimeInput.value);
-    
+
     if (currentMode === 'manual') {
-         maxDelay = minDelay;
-         maxDelayInput.value = minDelay; 
+        maxDelay = minDelay;
+        maxDelayInput.value = minDelay;
     }
-    
+
     if (currentMode === 'pro') {
         const rangeMin = 1.0;
         const rangeMax = 6.0;
 
         const newMin = Math.random() * (rangeMax - rangeMin) + rangeMin;
         const newMax = newMin + (Math.random() * (rangeMax - newMin - 0.5)) + 0.5;
-        
+
         minDelay = parseFloat(newMin.toFixed(1));
         maxDelay = parseFloat(newMax.toFixed(1));
-        
+
         minDelayInput.value = minDelay;
         maxDelayInput.value = maxDelay;
     }
 
-    const parTimeMs = parTime * 1000;
-    
-    if (minDelay > maxDelay) { 
+    if (minDelay > maxDelay) {
         statusDisplay.textContent = "ERROR: Retardo Min. debe ser menor o igual que el Máx.";
         stopDryFire(false);
         return;
     }
 
+    const parTimeMs = parTime * 1000;
     currentRepetition++;
 
-    createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime); 
+    createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime);
     currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
     readyVoice();
-    
+
     const delayToUse = getRandomDelay(minDelay, maxDelay);
-    
     counterDisplay.textContent = '00.00';
 
-    if (!speechAvailable) {
-        statusDisplay.textContent = `PREPARACIÓN... ESPERANDO SEÑAL`;
-    } else {
-        statusDisplay.textContent = `ESPERANDO SEÑAL...`;
-    }
+    statusDisplay.textContent = speechAvailable
+        ? `ESPERANDO SEÑAL...`
+        : `PREPARACIÓN... ESPERANDO SEÑAL`;
 
     mainTimerId = setTimeout(() => {
         if (!isRunningDryFire) return;
-        
-        // startBeep usa playBeep internamente (que reanudará el AudioContext si hace falta)
+
         startBeep();
-        
+
         mainTimerId = setTimeout(() => {
             if (!isRunningDryFire) return;
 
             parTimeBeep();
-            
+
             if (currentRepetition < totalRepetitions) {
-                const rest = parseFloat(restTimeInput.value) * 1000;
-                statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${rest / 1000}s...`;
-                mainTimerId = setTimeout(runRepetition, rest); 
+                const restMs = parseFloat(restTimeInput.value) * 1000;
+                statusDisplay.textContent =
+                    `¡HECHO! DESCANSO. PRÓXIMO SET EN ${restMs / 1000}s...`;
+                
+                mainTimerId = setTimeout(runRepetition, restMs);
             } else {
                 stopDryFire(true);
             }
 
         }, parTimeMs);
-        
-    }, delayToUse); 
-}
 
+    }, delayToUse);
+}
 
 function startDryFire() {
     if (isRunningDryFire) return;
-    
+
     totalRepetitions = parseInt(repetitionsInput.value);
+
     if (totalRepetitions < 1 || isNaN(totalRepetitions)) {
         alert("El número de Repeticiones debe ser 1 o más.");
         return;
     }
-    
+
     if (modeSelector.value === 'manual') {
         maxDelayInput.value = minDelayInput.value;
     }
 
-    currentRepetition = 0; 
+    currentRepetition = 0;
     isRunningDryFire = true;
-    
+
     toggleDryFireControls(true);
     clearDryFireLog();
     runRepetition();
@@ -335,13 +329,11 @@ function stopDryFire(completed = false) {
     clearTimeout(mainTimerId);
     stopTimerDisplay();
     isRunningDryFire = false;
-    
-    if (speechAvailable) {
-        window.speechSynthesis.cancel();
-    }
-    
+
+    if (speechAvailable) window.speechSynthesis.cancel();
+
     toggleDryFireControls(false);
-    
+
     if (completed) {
         statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
         counterDisplay.textContent = 'FIN';
@@ -360,20 +352,12 @@ function clearDryFireLog() {
 function createDryFireLogEntry(setNumber, minDelay, maxDelay, parTime) {
     const row = logTableBody.insertRow();
     row.id = `set-${setNumber}`;
-    
-    let cell1 = row.insertCell();
-    cell1.textContent = setNumber;
 
-    let cell2 = row.insertCell();
-    cell2.textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`; 
+    row.insertCell().textContent = setNumber;
+    row.insertCell().textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`;
+    row.insertCell().textContent = parTime.toFixed(2) + ' s';
+    row.insertCell().textContent = parTime.toFixed(2) + ' s';
 
-    let cell3 = row.insertCell();
-    cell3.textContent = parTime.toFixed(2) + ' s'; 
-    
-    let cell4 = row.insertCell();
-    cell4.textContent = parTime.toFixed(2) + ' s';
-    
-    logTableBody.appendChild(row);
     return row;
 }
 
@@ -384,31 +368,30 @@ function toggleDryFireControls(disable) {
     repetitionsInput.disabled = disable;
     restTimeInput.disabled = disable;
     modeSelector.disabled = disable;
-    
-    const mode = modeSelector.value;
-    
-    if (mode === 'pro') {
+
+    if (modeSelector.value === 'pro') {
         minDelayInput.disabled = true;
         maxDelayInput.disabled = true;
-    } else if (mode === 'manual') {
+    } else if (modeSelector.value === 'manual') {
         minDelayInput.disabled = disable;
     }
 }
 
 function updateDryFireInterfaceByMode() {
     const mode = modeSelector.value;
-    
+
     if (mode === 'pro') {
         minDelayLabel.textContent = 'RETARDO MIN. (s)';
-        maxDelayGroup.style.display = 'flex'; 
-        minDelayInput.disabled = true; 
-        maxDelayInput.disabled = true; 
+        maxDelayGroup.style.display = 'flex';
+        minDelayInput.disabled = true;
+        maxDelayInput.disabled = true;
+
     } else if (mode === 'manual') {
-        minDelayLabel.textContent = 'RETARDO (s)'; 
-        maxDelayGroup.style.display = 'none'; 
-        minDelayInput.disabled = false; 
+        minDelayLabel.textContent = 'RETARDO (s)';
+        maxDelayGroup.style.display = 'none';
+        minDelayInput.disabled = false;
     }
-    
+
     startButton.textContent = 'INICIAR';
     statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
     counterDisplay.textContent = '00.00';
@@ -422,45 +405,41 @@ function updateDryFireInterfaceByMode() {
 
 function updateMMAInterfaceByMode() {
     const mode = mmaModeSelector.value;
-    if (mode === 'random') {
-        mmaRoundTimeInput.classList.add('hidden');
-        mmaRoundTimeInput.disabled = true;
-        mmaRandomRangeGroup.classList.remove('hidden');
-        mmaMinRoundInput.disabled = false;
-        mmaMaxRoundInput.disabled = false;
-    } else {
-        mmaRoundTimeInput.classList.remove('hidden');
-        mmaRoundTimeInput.disabled = false;
-        mmaRandomRangeGroup.classList.add('hidden');
-    }
+    const isRandom = mode === 'random';
+
+    mmaRoundTimeInput.classList.toggle('hidden', isRandom);
+    mmaRoundTimeInput.disabled = isRandom;
+
+    mmaRandomRangeGroup.classList.toggle('hidden', !isRandom);
+    mmaMinRoundInput.disabled = !isRandom;
+    mmaMaxRoundInput.disabled = !isRandom;
 }
 
 function getRoundDuration() {
-    const mode = mmaModeSelector.value;
-    if (mode === 'random') {
+    if (mmaModeSelector.value === 'random') {
         const min = parseInt(mmaMinRoundInput.value) * 60;
         const max = parseInt(mmaMaxRoundInput.value) * 60;
         
-        const effectiveMin = Math.max(min, 180); 
-        
-        const randomMinutes = Math.floor(Math.random() * ((max / 60) - (effectiveMin / 60) + 1)) + (effectiveMin / 60);
-        
-        return randomMinutes * 60; 
-        
-    } else {
-        return parseInt(mmaRoundTimeInput.value) * 60; 
+        const effectiveMin = Math.max(min, 180);
+        const randomMinutes =
+            Math.floor(Math.random() * ((max / 60) - (effectiveMin / 60) + 1)) +
+            (effectiveMin / 60);
+
+        return randomMinutes * 60;
     }
+
+    return parseInt(mmaRoundTimeInput.value) * 60;
 }
 
 function startMMA() {
     if (isRunningMMA) return;
-    // Intentamos inicializar audio desde el arranque (gesture-based start)
+
     initAudioContext();
     stopDryFire(false);
 
     totalRounds = parseInt(mmaRoundsInput.value);
     currentRestDuration = parseInt(mmaRestTimeInput.value);
-    
+
     if (totalRounds < 1 || isNaN(totalRounds)) {
         alert("El número de Asaltos debe ser 1 o más.");
         return;
@@ -468,13 +447,16 @@ function startMMA() {
 
     currentRound = 0;
     isRunningMMA = true;
+
     mmaLogTableBody.innerHTML = '';
     mmaCounterDisplay.textContent = "00:00";
     mmaStatusDisplay.textContent = "¡PREPÁRATE!";
-    
+
     mmaToggleControls(true);
-    
-    mmaCurrentRoundDisplay.textContent = `ASALTO: 0/${totalRounds} - ESTADO: PREPARACIÓN`;
+
+    mmaCurrentRoundDisplay.textContent =
+        `ASALTO: 0/${totalRounds} - ESTADO: PREPARACIÓN`;
+
     mmaTimerId = setTimeout(runMMASequence, 3000);
 }
 
@@ -482,13 +464,13 @@ function stopMMA() {
     clearTimeout(mmaTimerId);
     clearInterval(mmaTimerId);
     isRunningMMA = false;
-    
-    if (speechAvailable) {
-        window.speechSynthesis.cancel();
-    }
-    
+
+    if (speechAvailable) window.speechSynthesis.cancel();
+
     mmaToggleControls(false);
-    mmaStatusDisplay.textContent = `DETENIDO. ${currentRound}/${totalRounds} ASALTOS REALIZADOS`;
+    mmaStatusDisplay.textContent =
+        `DETENIDO. ${currentRound}/${totalRounds} ASALTOS REALIZADOS`;
+
     mmaCurrentRoundDisplay.textContent = 'ASALTO: 0/0 - ESTADO: PAUSA';
     mmaCounterDisplay.textContent = '00:00';
 }
@@ -499,9 +481,15 @@ function mmaToggleControls(disable) {
     mmaRoundsInput.disabled = disable;
     mmaRestTimeInput.disabled = disable;
     mmaModeSelector.disabled = disable;
-    mmaRoundTimeInput.disabled = (mmaModeSelector.value === 'fixed' ? disable : true);
-    mmaMinRoundInput.disabled = (mmaModeSelector.value === 'random' ? disable : true);
-    mmaMaxRoundInput.disabled = (mmaModeSelector.value === 'random' ? disable : true);
+
+    mmaRoundTimeInput.disabled =
+        mmaModeSelector.value === 'fixed' ? disable : true;
+
+    mmaMinRoundInput.disabled =
+        mmaModeSelector.value === 'random' ? disable : true;
+
+    mmaMaxRoundInput.disabled =
+        mmaModeSelector.value === 'random' ? disable : true;
 }
 
 function runMMASequence() {
@@ -510,10 +498,11 @@ function runMMASequence() {
     if (currentRound >= totalRounds) {
         mmaStatusDisplay.textContent = '¡ENTRENAMIENTO COMPLETADO!';
         mmaCurrentRoundDisplay.textContent = 'ASALTO: COMPLETO';
-        // triple beep final (playBeep internamente reanudará audio si hace falta)
-        playBeep(400, 500); 
+
+        playBeep(400, 500);
         setTimeout(() => playBeep(400, 500), 600);
         setTimeout(() => playBeep(400, 500), 1200);
+
         stopMMA();
         return;
     }
@@ -521,15 +510,15 @@ function runMMASequence() {
     currentRound++;
     isRoundTime = true;
     currentRoundDuration = getRoundDuration();
-    
+
     mmaLogEntry('ASALTO', currentRound, currentRoundDuration / 60, currentRestDuration);
 
     mmaStatusDisplay.textContent = '¡ASALTO!';
-    mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
-    // inicio de asalto
-    playBeep(800, 500); 
-    
-    // arrancar contador (startMMACounter es async pero no es necesario await aquí)
+    mmaCurrentRoundDisplay.textContent =
+        `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
+
+    playBeep(800, 500);
+
     startMMACounter(currentRoundDuration, startRest);
 }
 
@@ -537,52 +526,49 @@ function startRest() {
     if (!isRunningMMA) return;
 
     isRoundTime = false;
-    
+
     if (currentRound < totalRounds) {
         mmaStatusDisplay.textContent = '¡TIEMPO! DESCANSO.';
-        mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: DESCANSO`;
-        playBeep(400, 500); 
-        
+        mmaCurrentRoundDisplay.textContent =
+            `ASALTO: ${currentRound}/${totalRounds} - ESTADO: DESCANSO`;
+
+        playBeep(400, 500);
+
         mmaLogEntry('DESCANSO', currentRound, currentRoundDuration / 60, currentRestDuration);
-        
-        startMMACounter(currentRestDuration, runMMASequence); 
+
+        startMMACounter(currentRestDuration, runMMASequence);
+
     } else {
-        runMMASequence(); 
+        runMMASequence();
     }
 }
 
-/**
- * startMMACounter: ahora asíncrona al inicio para asegurar initAudioContext antes de
- * posibles beeps en la cuenta atrás. Sigue usando setInterval/clearInterval como antes.
- */
 async function startMMACounter(duration, callback) {
-    // Asegurar AudioContext activo antes de los avisos
-    await initAudioContext().catch(() => { /* no romper la ejecución si falla */ });
+    await initAudioContext().catch(() => {});
 
     let timeLeft = duration;
-    
-    clearInterval(mmaTimerId); 
+    clearInterval(mmaTimerId);
 
     function updateCounter() {
         const minutes = Math.floor(timeLeft / 60);
         const seconds = timeLeft % 60;
-        
-        mmaCounterDisplay.textContent = 
+
+        mmaCounterDisplay.textContent =
             `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        
-        if (timeLeft === 10) {
-            if (speechAvailable) {
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Diez segundos"));
-            }
+
+        if (timeLeft === 10 && speechAvailable) {
+            window.speechSynthesis.speak(
+                new SpeechSynthesisUtterance("Diez segundos")
+            );
         }
+
         if (timeLeft <= 3 && timeLeft > 0) {
-            // playBeep internamente reanudará audio si es necesario
-            playBeep(isRoundTime ? 1000 : 600, 100); 
+            playBeep(isRoundTime ? 1000 : 600, 100);
         }
 
         if (timeLeft <= 0) {
             clearInterval(mmaTimerId);
-            callback(); 
+            callback();
         } else {
             timeLeft--;
         }
@@ -594,20 +580,15 @@ async function startMMACounter(duration, callback) {
 
 function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
     const row = mmaLogTableBody.insertRow();
-    
-    let cell1 = row.insertCell();
-    cell1.textContent = roundNum;
 
-    let cell2 = row.insertCell();
-    cell2.textContent = `${roundTimeMin.toFixed(1)} min`;
+    row.insertCell().textContent = roundNum;
+    row.insertCell().textContent = `${roundTimeMin.toFixed(1)} min`;
+    row.insertCell().textContent = `${restTimeSec} s`;
 
-    let cell3 = row.insertCell();
-    cell3.textContent = `${restTimeSec} s`;
-    
-    let cell4 = row.insertCell();
-    cell4.textContent = type;
-    cell4.style.fontWeight = 'bold';
-    cell4.style.color = (type === 'ASALTO' ? '#00e676' : '#ff3d00'); 
+    const typeCell = row.insertCell();
+    typeCell.textContent = type;
+    typeCell.style.fontWeight = 'bold';
+    typeCell.style.color = type === 'ASALTO' ? '#00e676' : '#ff3d00';
 }
 
 
@@ -655,7 +636,7 @@ dryFireTab.addEventListener('click', () => {
     dryFireTab.classList.add('active');
     mmaTab.classList.remove('active');
     
-    stopMMA(); 
+    stopMMA();
     setDryFireStyle();
     updateDryFireInterfaceByMode();
 });
@@ -666,28 +647,28 @@ mmaTab.addEventListener('click', () => {
     mmaTab.classList.add('active');
     dryFireTab.classList.remove('active');
     
-    stopDryFire(false); 
+    stopDryFire(false);
     setMMAStyle();
     updateMMAInterfaceByMode();
 });
 
 
 // ----------------------------------------------------
-// ✅ **BOTÓN INICIAR – PARCHE SAFARI (NUEVO)**
+// ✅ **BOTÓN INICIAR – SECUENCIA SEGURA UNIVERSAL**  
 // ----------------------------------------------------
 
 startButton.addEventListener('click', async () => {
 
     await initAudioContext();
 
-    // Forzar carga de voces (algunos Safari necesitan getVoices() llamado tras interacción)
+    // Dispara carga interna de voces
     window.speechSynthesis.getVoices();
 
+    // Parche final Android/iOS
     await unlockTTS();
 
     startDryFire();
 });
-
 
 stopButton.addEventListener('click', () => stopDryFire(false));
 modeSelector.addEventListener('change', updateDryFireInterfaceByMode);
