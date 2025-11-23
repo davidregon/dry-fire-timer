@@ -1,4 +1,4 @@
-// --- DRY FIRE REFERENCES (EXISTING) ---
+// --- DRY FIRE REFERENCES ---
 const dryFireTab = document.getElementById('dryFireTab');
 const mmaTab = document.getElementById('mmaTab');
 const dryFireContent = document.getElementById('dryFireContent');
@@ -19,10 +19,9 @@ const minDelayLabel = document.getElementById('minDelayLabel');
 const maxDelayGroup = document.getElementById('maxDelayGroup');
 const container = document.querySelector('.container');
 const displayArea = document.querySelector('.display-area');
-const logPanel = document.getElementById('logPanel');
 const headerMotto = document.getElementById('header-motto');
 
-// --- MMA TIMER REFERENCES (NEW) ---
+// --- MMA TIMER REFERENCES ---
 const mmaModeSelector = document.getElementById('mmaModeSelector');
 const mmaRoundTimeInput = document.getElementById('mmaRoundTime');
 const mmaRestTimeInput = document.getElementById('mmaRestTime');
@@ -46,17 +45,10 @@ let startTime = 0;
 let isRunningDryFire = false; 
 let isRunningMMA = false; 
 
-// --- AUDIO STATE (DOBLE CLICK) ---
-let isAudioUnlocked = false; 
-
-// 🔴 VARIABLE CRÍTICA PARA QUE NO SE BORRE LA VOZ EN ANDROID
-let globalUtterance = null; 
-
 // --- DRY FIRE STATE ---
 let currentRepetition = 0;
 let totalRepetitions = 0;
 let isCountingTime = false;
-let speechAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window && typeof window.speechSynthesis.speak === 'function';
 
 // --- MMA TIMER STATE ---
 let currentRound = 0;
@@ -76,12 +68,9 @@ function initAudioContext() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (audioContext.state === 'suspended') {
-            return audioContext.resume().catch(e => {
-                console.error("Error al reanudar AudioContext:", e);
-            });
+            return audioContext.resume().catch(e => console.error(e));
         }
     } catch (e) {
-        console.warn("initAudioContext fallo:", e);
         audioContext = null;
     }
     return Promise.resolve();
@@ -99,6 +88,7 @@ async function playBeep(frequency, duration) {
         oscillator.type = 'square';
         oscillator.frequency.setValueAtTime(frequency, context.currentTime);
 
+        // Subir volumen rápido y bajar al final para evitar "clic"
         gainNode.gain.setValueAtTime(0.0001, context.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.5, context.currentTime + 0.01);
 
@@ -108,10 +98,7 @@ async function playBeep(frequency, duration) {
         oscillator.start(context.currentTime);
         oscillator.stop(context.currentTime + duration / 1000);
 
-        gainNode.gain.exponentialRampToValueAtTime(
-            0.0001, 
-            context.currentTime + duration / 1000 - 0.01
-        );
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration / 1000 - 0.01);
 
         setTimeout(() => {
             try { oscillator.disconnect(); gainNode.disconnect(); } catch {}
@@ -124,85 +111,32 @@ async function playBeep(frequency, duration) {
 
 
 // ----------------------------------------------------
-// ✅ DESBLOQUEO DE VOZ SILENCIOSO
+// --- SONIDOS ---
 // ----------------------------------------------------
-function unlockTTS(timeoutMs = 1200) {
-    return new Promise(resolve => {
-        if (!speechAvailable) return resolve();
-        try {
-            // Usamos la variable global también aquí por seguridad
-            globalUtterance = new SpeechSynthesisUtterance(""); // Vacío, solo para activar
-            globalUtterance.volume = 0.01;  
-            
-            let resolved = false;
-            const finish = () => { if (!resolved) { resolved = true; resolve(); }};
 
-            globalUtterance.onend = finish;
-            globalUtterance.onerror = finish;
-
-            try {
-                window.speechSynthesis.speak(globalUtterance);
-            } catch (e) {
-                finish();
-            }
-
-            setTimeout(finish, timeoutMs);
-
-        } catch (e) {
-            resolve();
-        }
-    });
+function readySignal() {
+    // Señal de "Preparado": Dos pitidos medios-graves rápidos
+    // Tono 600Hz (más grave que el de fuego que es 2000Hz)
+    playBeep(600, 100);
+    setTimeout(() => playBeep(600, 100), 150);
+    
+    statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
 }
 
-
-// ----------------------------------------------------
-// --- DRY FIRE SOUNDS & VOICE ---
-// ----------------------------------------------------
-
 function startBeep() {
-    playBeep(2000, 200);
+    // Señal de "FUEGO": Un pitido muy agudo y cortante
+    playBeep(2000, 250);
     statusDisplay.textContent = `¡FUEGO! COMPLETAR EJERCICIO`;
     startTimerDisplay();
 }
 
 function parTimeBeep() {
+    // Señal de Tiempo Límite: Dos pitidos graves
     stopTimerDisplay();
     playBeep(400, 150);
     setTimeout(() => playBeep(400, 150), 200);
 
     statusDisplay.textContent = `TIEMPO LÍMITE ALCANZADO.`;
-}
-
-// ✅ FUNCIÓN CORREGIDA PARA EVITAR GARBAGE COLLECTION
-function readyVoice() {
-    if (!speechAvailable) {
-        statusDisplay.textContent = `PREPARADO... ESPERANDO SEÑAL`;
-        return;
-    }
-
-    // Asegurar que el motor no está pausado (bug común)
-    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-
-    // Cancelar cualquier cosa pendiente antes del timeout
-    window.speechSynthesis.cancel();
-
-    setTimeout(() => {
-        try {
-            // 🔴 GUARDAMOS EN VARIABLE GLOBAL (CRÍTICO PARA ANDROID)
-            globalUtterance = new SpeechSynthesisUtterance("Preparado?");
-            globalUtterance.lang = "es-ES";
-            globalUtterance.volume = 1;
-            globalUtterance.rate = 1;
-            globalUtterance.pitch = 1;
-
-            // Failsafe simple
-            globalUtterance.onerror = (e) => console.log("TTS error", e);
-
-            window.speechSynthesis.speak(globalUtterance);
-        } catch (e) {
-            console.log("Error al reproducir 'Preparado?':", e);
-        }
-    }, 400); 
 }
 
 
@@ -226,14 +160,10 @@ function stopTimerDisplay() {
 
 function updateTimerDisplay() {
     if (!isCountingTime) return;
-
     const elapsedTime = Date.now() - startTime;
     const seconds = Math.floor(elapsedTime / 1000);
     const centiseconds = Math.floor((elapsedTime % 1000) / 10);
-
-    counterDisplay.textContent =
-        `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-
+    counterDisplay.textContent = `${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
     animationFrameId = requestAnimationFrame(updateTimerDisplay);
 }
 
@@ -247,7 +177,6 @@ function getRandomDelay(min, max) {
     const maxNum = parseFloat(max);
     const minMs = minNum * 1000;
     const maxMs = maxNum * 1000;
-
     if (Number.isNaN(minMs) || Number.isNaN(maxMs)) return 1000; 
     if (minMs === maxMs) return minMs;
     return Math.random() * (maxMs - minMs) + minMs;
@@ -300,30 +229,29 @@ function runRepetition() {
         createDryFireLogEntry(currentRepetition, minDelay, maxDelay, parTime);
         currentSetDisplay.textContent = `Set: ${currentRepetition}/${totalRepetitions}`;
 
-        // Llamar a la voz (ahora es más robusta)
-        readyVoice();
+        // 1. Sonido de "Preparado" (Bip-Bip grave)
+        readySignal();
 
         const delayToUse = getRandomDelay(minDelay, maxDelay);
         counterDisplay.textContent = '00.00';
 
-        statusDisplay.textContent = speechAvailable
-            ? `ESPERANDO SEÑAL...`
-            : `PREPARACIÓN... ESPERANDO SEÑAL`;
-
+        // Timer principal para el "FUEGO"
         mainTimerId = setTimeout(() => {
             if (!isRunningDryFire) return;
+            
+            // 2. Sonido de Fuego (Biiip agudo)
             startBeep();
 
+            // Timer para el tiempo límite (PAR Time)
             mainTimerId = setTimeout(() => {
                 if (!isRunningDryFire) return;
 
                 parTimeBeep();
 
+                // Lógica de descanso o fin
                 if (currentRepetition < totalRepetitions) {
                     const restMs = parseFloat(restTimeInput.value) * 1000 || 3000;
-                    statusDisplay.textContent =
-                        `¡HECHO! DESCANSO. PRÓXIMO SET EN ${restMs / 1000}s...`;
-
+                    statusDisplay.textContent = `¡HECHO! DESCANSO. PRÓXIMO SET EN ${restMs / 1000}s...`;
                     mainTimerId = setTimeout(runRepetition, restMs);
                 } else {
                     stopDryFire(true);
@@ -372,12 +300,7 @@ function stopDryFire(completed = false) {
         stopTimerDisplay();
         isRunningDryFire = false;
 
-        if (speechAvailable) {
-            try { window.speechSynthesis.cancel(); } catch(e){}
-        }
-
         toggleDryFireControls(false);
-        startButton.textContent = "INICIAR"; 
 
         if (completed) {
             statusDisplay.textContent = 'ENTRENAMIENTO COMPLETADO';
@@ -400,13 +323,10 @@ function clearDryFireLog() {
 function createDryFireLogEntry(setNumber, minDelay, maxDelay, parTime) {
     if (!logTableBody) return null;
     const row = logTableBody.insertRow();
-    row.id = `set-${setNumber}`;
-
     row.insertCell().textContent = setNumber;
     row.insertCell().textContent = `${minDelay.toFixed(1)} - ${maxDelay.toFixed(1)} s`;
     row.insertCell().textContent = parTime.toFixed(2) + ' s';
     row.insertCell().textContent = parTime.toFixed(2) + ' s';
-
     return row;
 }
 
@@ -428,19 +348,16 @@ function toggleDryFireControls(disable) {
 
 function updateDryFireInterfaceByMode() {
     const mode = modeSelector.value;
-
     if (mode === 'pro') {
         minDelayLabel.textContent = 'RETARDO MIN. (s)';
         if (maxDelayGroup) maxDelayGroup.style.display = 'flex';
         minDelayInput.disabled = true;
         maxDelayInput.disabled = true;
-
     } else if (mode === 'manual') {
         minDelayLabel.textContent = 'RETARDO (s)';
         if (maxDelayGroup) maxDelayGroup.style.display = 'none';
         minDelayInput.disabled = false;
     }
-
     startButton.textContent = 'INICIAR';
     statusDisplay.textContent = 'CONFIGURA Y PULSA INICIAR';
     counterDisplay.textContent = '00.00';
@@ -455,10 +372,10 @@ function updateDryFireInterfaceByMode() {
 function updateMMAInterfaceByMode() {
     const mode = mmaModeSelector.value;
     const isRandom = mode === 'random';
-
-    if (mmaRoundTimeInput) mmaRoundTimeInput.classList.toggle('hidden', isRandom);
-    if (mmaRoundTimeInput) mmaRoundTimeInput.disabled = isRandom;
-
+    if (mmaRoundTimeInput) {
+        mmaRoundTimeInput.classList.toggle('hidden', isRandom);
+        mmaRoundTimeInput.disabled = isRandom;
+    }
     if (mmaRandomRangeGroup) mmaRandomRangeGroup.classList.toggle('hidden', !isRandom);
     if (mmaMinRoundInput) mmaMinRoundInput.disabled = !isRandom;
     if (mmaMaxRoundInput) mmaMaxRoundInput.disabled = !isRandom;
@@ -468,12 +385,8 @@ function getRoundDuration() {
     if (mmaModeSelector.value === 'random') {
         const min = parseInt(mmaMinRoundInput.value) * 60;
         const max = parseInt(mmaMaxRoundInput.value) * 60;
-        
         const effectiveMin = Math.max(min, 180);
-        const randomMinutes =
-            Math.floor(Math.random() * ((max / 60) - (effectiveMin / 60) + 1)) +
-            (effectiveMin / 60);
-
+        const randomMinutes = Math.floor(Math.random() * ((max / 60) - (effectiveMin / 60) + 1)) + (effectiveMin / 60);
         return randomMinutes * 60;
     }
     return parseInt(mmaRoundTimeInput.value) * 60;
@@ -481,50 +394,32 @@ function getRoundDuration() {
 
 function startMMA() {
     if (isRunningMMA) return;
-
     initAudioContext();
     stopDryFire(false);
-
     totalRounds = parseInt(mmaRoundsInput.value);
     currentRestDuration = parseInt(mmaRestTimeInput.value);
-
     if (totalRounds < 1 || isNaN(totalRounds)) {
         alert("El número de Asaltos debe ser 1 o más.");
         return;
     }
-
     currentRound = 0;
     isRunningMMA = true;
-
     mmaLogTableBody.innerHTML = '';
     mmaCounterDisplay.textContent = "00:00";
     mmaStatusDisplay.textContent = "¡PREPÁRATE!";
-
     mmaToggleControls(true);
-
-    mmaCurrentRoundDisplay.textContent =
-        `ASALTO: 0/${totalRounds} - ESTADO: PREPARACIÓN`;
-
+    mmaCurrentRoundDisplay.textContent = `ASALTO: 0/${totalRounds} - ESTADO: PREPARACIÓN`;
     mmaTimerId = setTimeout(runMMASequence, 3000);
 }
 
 function stopMMA() {
-    try {
-        clearTimeout(mmaTimerId);
-        clearInterval(mmaTimerId);
-        isRunningMMA = false;
-
-        if (speechAvailable) window.speechSynthesis.cancel();
-
-        mmaToggleControls(false);
-        mmaStatusDisplay.textContent =
-            `DETENIDO. ${currentRound}/${totalRounds} ASALTOS REALIZADOS`;
-
-        mmaCurrentRoundDisplay.textContent = 'ASALTO: 0/0 - ESTADO: PAUSA';
-        mmaCounterDisplay.textContent = '00:00';
-    } catch (e) {
-        console.error("stopMMA fallo:", e);
-    }
+    clearTimeout(mmaTimerId);
+    clearInterval(mmaTimerId);
+    isRunningMMA = false;
+    mmaToggleControls(false);
+    mmaStatusDisplay.textContent = `DETENIDO. ${currentRound}/${totalRounds} ASALTOS REALIZADOS`;
+    mmaCurrentRoundDisplay.textContent = 'ASALTO: 0/0 - ESTADO: PAUSA';
+    mmaCounterDisplay.textContent = '00:00';
 }
 
 function mmaToggleControls(disable) {
@@ -533,63 +428,41 @@ function mmaToggleControls(disable) {
     mmaRoundsInput.disabled = disable;
     mmaRestTimeInput.disabled = disable;
     mmaModeSelector.disabled = disable;
-
-    mmaRoundTimeInput.disabled =
-        mmaModeSelector.value === 'fixed' ? disable : true;
-
-    mmaMinRoundInput.disabled =
-        mmaModeSelector.value === 'random' ? disable : true;
-
-    mmaMaxRoundInput.disabled =
-        mmaModeSelector.value === 'random' ? disable : true;
+    mmaRoundTimeInput.disabled = mmaModeSelector.value === 'fixed' ? disable : true;
+    mmaMinRoundInput.disabled = mmaModeSelector.value === 'random' ? disable : true;
+    mmaMaxRoundInput.disabled = mmaModeSelector.value === 'random' ? disable : true;
 }
 
 function runMMASequence() {
     if (!isRunningMMA) return;
-
     if (currentRound >= totalRounds) {
         mmaStatusDisplay.textContent = '¡ENTRENAMIENTO COMPLETADO!';
         mmaCurrentRoundDisplay.textContent = 'ASALTO: COMPLETO';
-
         playBeep(400, 500);
         setTimeout(() => playBeep(400, 500), 600);
         setTimeout(() => playBeep(400, 500), 1200);
-
         stopMMA();
         return;
     }
-
     currentRound++;
     isRoundTime = true;
     currentRoundDuration = getRoundDuration();
-
     mmaLogEntry('ASALTO', currentRound, currentRoundDuration / 60, currentRestDuration);
-
     mmaStatusDisplay.textContent = '¡ASALTO!';
-    mmaCurrentRoundDisplay.textContent =
-        `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
-
+    mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: ASALTO`;
     playBeep(800, 500);
-
     startMMACounter(currentRoundDuration, startRest);
 }
 
 function startRest() {
     if (!isRunningMMA) return;
-
     isRoundTime = false;
-
     if (currentRound < totalRounds) {
         mmaStatusDisplay.textContent = '¡TIEMPO! DESCANSO.';
-        mmaCurrentRoundDisplay.textContent =
-            `ASALTO: ${currentRound}/${totalRounds} - ESTADO: DESCANSO`;
-
+        mmaCurrentRoundDisplay.textContent = `ASALTO: ${currentRound}/${totalRounds} - ESTADO: DESCANSO`;
         playBeep(400, 500);
-
         mmaLogEntry('DESCANSO', currentRound, currentRoundDuration / 60, currentRestDuration);
-
         startMMACounter(currentRestDuration, runMMASequence);
-
     } else {
         runMMASequence();
     }
@@ -597,27 +470,17 @@ function startRest() {
 
 async function startMMACounter(duration, callback) {
     await initAudioContext().catch(() => {});
-
     let timeLeft = duration;
     clearInterval(mmaTimerId);
 
     function updateCounter() {
         const minutes = Math.floor(timeLeft / 60);
         const seconds = timeLeft % 60;
-
-        mmaCounterDisplay.textContent =
-            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-        if (timeLeft === 10 && speechAvailable) {
-            try {
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Diez segundos"));
-            } catch (e) {}
-        }
-
+        mmaCounterDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        
         if (timeLeft <= 3 && timeLeft > 0) {
             playBeep(isRoundTime ? 1000 : 600, 100);
         }
-
         if (timeLeft <= 0) {
             clearInterval(mmaTimerId);
             callback();
@@ -625,18 +488,15 @@ async function startMMACounter(duration, callback) {
             timeLeft--;
         }
     }
-
     updateCounter();
     mmaTimerId = setInterval(updateCounter, 1000);
 }
 
 function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
     const row = mmaLogTableBody.insertRow();
-
     row.insertCell().textContent = roundNum;
     row.insertCell().textContent = `${roundTimeMin.toFixed(1)} min`;
     row.insertCell().textContent = `${restTimeSec} s`;
-
     const typeCell = row.insertCell();
     typeCell.textContent = type;
     typeCell.style.fontWeight = 'bold';
@@ -651,17 +511,14 @@ function mmaLogEntry(type, roundNum, roundTimeMin, restTimeSec) {
 function setDryFireStyle() {
     const green = '#00e676';
     const greenShadow = '0 0 5px rgba(0, 230, 118, 0.7)';
-    
     if (container) container.style.borderColor = green;
     if (displayArea) displayArea.style.borderColor = green;
     if (headerMotto) headerMotto.style.color = green;
     if (headerMotto) headerMotto.style.borderBottomColor = green;
-    
     const h1 = document.querySelector('h1');
     if (h1) { h1.style.color = green; h1.style.textShadow = greenShadow; }
     const c = document.getElementById('counter');
     if (c) c.style.color = green;
-
     const sb = document.getElementById('startButton');
     const st = document.getElementById('stopButton');
     if (sb) sb.style.backgroundColor = green;
@@ -671,17 +528,14 @@ function setDryFireStyle() {
 function setMMAStyle() {
     const red = '#ff3d00';
     const redShadow = '0 0 5px rgba(255, 61, 0, 0.7)';
-
     if (container) container.style.borderColor = red;
     if (displayArea) displayArea.style.borderColor = red;
     if (headerMotto) headerMotto.style.color = red;
     if (headerMotto) headerMotto.style.borderBottomColor = red;
-    
     const h1 = document.querySelector('h1');
     if (h1) { h1.style.color = red; h1.style.textShadow = redShadow; }
     const mc = document.getElementById('mmaCounter');
     if (mc) mc.style.color = red;
-
     const msb = document.getElementById('mmaStartButton');
     const msstop = document.getElementById('mmaStopButton');
     if (msb) msb.style.backgroundColor = red;
@@ -693,7 +547,6 @@ dryFireTab.addEventListener('click', () => {
     if (mmaContent) mmaContent.classList.add('hidden');
     dryFireTab.classList.add('active');
     mmaTab.classList.remove('active');
-    
     stopMMA();
     setDryFireStyle();
     updateDryFireInterfaceByMode();
@@ -704,59 +557,23 @@ mmaTab.addEventListener('click', () => {
     if (dryFireContent) dryFireContent.classList.add('hidden');
     mmaTab.classList.add('active');
     dryFireTab.classList.remove('active');
-    
     stopDryFire(false);
     setMMAStyle();
     updateMMAInterfaceByMode();
 });
 
-
-// ----------------------------------------------------
-// ✅ LÓGICA DE INICIO EN DOS PASOS + SEGURO AUDIO
-// ----------------------------------------------------
+// EVENTO SIMPLE - CLICK DIRECTO (Ya no hace falta doble click porque es solo sonido)
 startButton.addEventListener('click', async () => {
     if (startButton.disabled) return;
-
-    if (!isAudioUnlocked) {
-        startButton.disabled = true;
-        statusDisplay.textContent = "ACTIVANDO AUDIO...";
-
-        try {
-            await initAudioContext().catch(() => {});
-            try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
-
-            if (speechAvailable) {
-                await unlockTTS(800); 
-            }
-
-            isAudioUnlocked = true; 
-            
-            startButton.textContent = "CONFIRMAR INICIO";
-            statusDisplay.textContent = "AUDIO ACTIVADO. PULSA OTRA VEZ PARA EMPEZAR.";
-
-        } catch (e) {
-            console.warn("Error activando audio:", e);
-        } finally {
-            startButton.disabled = false;
-        }
-        return; 
-    }
-
-    startButton.disabled = true;
-    try {
-        startDryFire();
-    } catch (e) {
-        console.error("startDryFire lanzamiento fallo:", e);
-        toggleDryFireControls(false);
-    } finally {
-        if (!isRunningDryFire) startButton.disabled = false;
-    }
+    
+    // Iniciar contexto de audio con un gesto de usuario
+    await initAudioContext();
+    
+    startDryFire();
 });
-
 
 stopButton.addEventListener('click', () => stopDryFire(false));
 modeSelector.addEventListener('change', updateDryFireInterfaceByMode);
-
 mmaStartButton.addEventListener('click', startMMA);
 mmaStopButton.addEventListener('click', stopMMA);
 mmaModeSelector.addEventListener('change', updateMMAInterfaceByMode);
@@ -767,12 +584,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMMAInterfaceByMode();
         setDryFireStyle();
     } catch (e) { console.error(e); }
-    
     if (minDelayInput) {
         minDelayInput.addEventListener('change', () => {
-            if (modeSelector.value === 'manual') {
-                maxDelayInput.value = minDelayInput.value;
-            }
+            if (modeSelector.value === 'manual') maxDelayInput.value = minDelayInput.value;
         });
     }
 });
